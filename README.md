@@ -33,7 +33,7 @@ https://joelraj18.github.io/datamind-playground2.0/
 ![Blueprint](screenshots/blueprint.png)
 
 ### Large Dataset Handling
-![Large Datasets](screenshots/large-datasets.png)
+![Large Datasets](screenshots/largedatasets.png)
 
 Core Features
 
