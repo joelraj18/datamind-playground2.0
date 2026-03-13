@@ -157,39 +157,48 @@ export default function DataMind() {
         showNotification('Parsing file and analyzing data...', 'info');
         setIsAnalyzing(true);
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            Papa.parse(event.target.result, {
-                header: true,
-                dynamicTyping: true,
-                skipEmptyLines: true,
-                complete: (result) => {
-                    setIsAnalyzing(false);
-                    if (result.data && result.data.length > 0) {
-                        const newDataset = {
-                            id: Date.now(),
-                            name: file.name,
-                            data: result.data,
-                            columns: Object.keys(result.data[0] || {}),
-                            uploadedAt: new Date().toISOString()
-                        };
-                        const updated = [...datasets, newDataset];
-                        saveUserData(updated);
-                        setActiveDataset(newDataset);
-                        setView('explorer');
-                        analyzeDataset(newDataset);
-                        showNotification(`Dataset "${newDataset.name}" uploaded and analyzed!`, 'success');
-                    } else {
-                        showNotification('No data found in file. Please upload a valid CSV.', 'error');
-                    }
-                },
-                error: (error) => {
-                    setIsAnalyzing(false);
-                    showNotification('Error parsing file: ' + error.message, 'error');
+        let parsedData = [];
+
+        Papa.parse(file, {
+            header: true,
+            dynamicTyping: true,
+            skipEmptyLines: true,
+            worker: true,
+            chunkSize: 1024 * 1024, // 1MB chunks
+
+            chunk: (results) => {
+                parsedData.push(...results.data);
+            },
+
+            complete: () => {
+                setIsAnalyzing(false);
+
+                if (parsedData.length > 0) {
+                    const newDataset = {
+                        id: Date.now(),
+                        name: file.name,
+                        data: parsedData,
+                        columns: Object.keys(parsedData[0] || {}),
+                        uploadedAt: new Date().toISOString()
+                    };
+
+                    const updated = [...datasets, newDataset];
+                    saveUserData(updated);
+                    setActiveDataset(newDataset);
+                    setView('explorer');
+                    analyzeDataset(newDataset);
+
+                    showNotification(`Dataset "${newDataset.name}" uploaded and analyzed!`, 'success');
+                } else {
+                    showNotification('No data found in file.', 'error');
                 }
-            });
-        };
-        reader.readAsText(file);
+            },
+
+            error: (error) => {
+                setIsAnalyzing(false);
+                showNotification('Error parsing file: ' + error.message, 'error');
+            }
+        });
     };
 
     // [IMPROVEMENT] Enhanced Analysis Functions and Logic
@@ -237,7 +246,11 @@ export default function DataMind() {
         if (!dataset || !dataset.data || dataset.data.length === 0) return;
 
         const cols = dataset.columns;
-        const data = dataset.data;
+        const MAX_ANALYSIS_ROWS = 110000;
+        // CHANGE SIZE DATASET
+        const data = dataset.data.length > MAX_ANALYSIS_ROWS
+            ? dataset.data.slice(0, MAX_ANALYSIS_ROWS)
+            : dataset.data;
         const newStats = {};
         const newInsights = [];
         const newDistributions = {};
@@ -753,7 +766,8 @@ for col in df.select_dtypes(include='object').columns:
                     </tbody>
                 </table>
                 <div className="mt-4 p-4 bg-slate-800/50 rounded-lg">
-                    <h4 className="text-lg font-semibold text-emerald-300 mb-2">Top Correlated Pairs (|r| > 0.5)</h4>
+                    <h4 className="text-lg font-semibold text-emerald-300 mb-2">Top Correlated Pairs (|r| &gt; 0.5)</h4>
+                   {/*CHATGPT CHECK */}
                     <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
                         {data.filter(c => Math.abs(c.correlation) > 0.5).slice(0, 5).map(c => (
                             <li key={`${c.col1}-${c.col2}`} className={c.correlation > 0.7 ? 'text-red-300' : (c.correlation < -0.7 ? 'text-blue-300' : '')}>
@@ -1128,7 +1142,8 @@ for col in df.select_dtypes(include='object').columns:
                         <ul className="text-sm space-y-1 text-gray-300">
                             <li>Numeric Cols: <strong className="text-white">{activeDataset.columns.filter(c => stats?.[c]?.type === 'numeric').length}</strong></li>
                             <li>Categorical Cols: <strong className="text-white">{activeDataset.columns.filter(c => stats?.[c]?.type === 'categorical').length}</strong></li>
-                            <li>Strong Correlations (>|0.7|): <strong className="text-red-300">{correlations.filter(c => Math.abs(c.correlation) > 0.7).length}</strong></li>
+                            <li>Strong Correlations (|r| &gt; 0.7): <strong className="text-red-300">{correlations.filter(c => Math.abs(c.correlation) > 0.7).length}</strong></li>
+                           {/*CHATGPT CHECK */}
                         </ul>
                     </div>
 
@@ -1494,7 +1509,8 @@ const QualitySection = ({ stats, insights, activeDataset }) => {
                     
                     {/* Data Consistency (CV) */}
                     <div className="p-4 bg-slate-700/50 rounded-lg">
-                        <h4 className="text-lg font-semibold text-white mb-2">Inconsistent Numerical Features (CV > 75%)</h4>
+                        <h4 className="text-lg font-semibold text-white mb-2">Inconsistent Numerical Features (CV &gt; 75%)</h4>
+                        {/*CHATGPT CHECK */}
                         {inconsistentCols.length > 0 ? (
                             <ul className="list-disc list-inside text-sm text-yellow-300 ml-4">
                                 {inconsistentCols.map((item) => (
