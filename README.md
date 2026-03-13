@@ -6,6 +6,35 @@ The entire analysis pipeline runs locally in the user’s browser, making it fas
 Upload CSV → Instantly generate statistical insights, visualizations, and predictive signals — directly in your browser.
 ⸻
 
+## Live Demo
+https://joelraj18.github.io/datamind-playground2.0/
+
+## Screenshots
+
+### Univariate Analysis
+![Univariate](screenshots/univariate.png)
+
+### Statistical Summary
+![Stats](screenshots/stats.png)
+
+### Correlation Matrix
+![Correlation](screenshots/correlation.png)
+
+### Bivariate Analysis
+![Bivariate](screenshots/bivariate.png)
+
+### Insights Engine
+![Insights](screenshots/insights.png)
+
+### Advanced Insights
+![Insight2](screenshots/insight2.png)
+
+### Decision / Predictive Blueprint
+![Blueprint](screenshots/blueprint.png)
+
+### Large Dataset Handling
+![Large Datasets](screenshots/large-datasets.png)
+
 Core Features
 
 DataMind automatically performs multiple layers of analysis after a CSV upload.
