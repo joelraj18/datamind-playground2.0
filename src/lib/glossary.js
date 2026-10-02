@@ -27,6 +27,6 @@ export const GLOSSARY = {
     riskScore: 'Score = |r with target| ÷ CV. Rewards columns that track the target closely while staying stable.',
     skew: 'When a group’s mean sits well above its median, a few very high values are pulling the average up.',
     template: 'Python code you can paste into Jupyter or Colab to reproduce these charts with pandas and seaborn.',
-    sampling: 'To keep the browser responsive, analysis uses the first 110,000 rows. Exports still include every row.',
-    privacy: 'Files are parsed with JavaScript on your device and saved to this browser’s local storage. Nothing is uploaded to a server.',
+    sampling: 'To keep the browser responsive, statistics are computed on 110,000 rows sampled evenly from the start to the end of the file. Record counts and exports always include every row.',
+    privacy: 'Files are parsed with JavaScript on your device and saved in this browser’s own storage (IndexedDB). Nothing is uploaded to a server.',
 };

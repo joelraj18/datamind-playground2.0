@@ -57,7 +57,7 @@ export default function ExplorerView({ dataset, analysis, tab, onTabChange, onEx
             </header>
 
             {analysis.sampled && (
-                <Callout title={`Analysed the first ${analysis.recordCount.toLocaleString()} of ${analysis.totalRecords.toLocaleString()} rows`}>
+                <Callout title={`Statistics use an even sample of ${analysis.recordCount.toLocaleString()} of ${analysis.totalRecords.toLocaleString()} rows`}>
                     {GLOSSARY.sampling}
                 </Callout>
             )}

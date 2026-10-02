@@ -120,7 +120,7 @@ function UploadZone({ onFile, busy }) {
     );
 }
 
-export default function DatasetsView({ datasets, activeId, busy, onFile, onOpen, onDelete, onSample }) {
+export default function DatasetsView({ datasets, activeId, busy, loading, onFile, onOpen, onDelete, onSample }) {
     return (
         <div className="page">
             <header className="page-hero">
@@ -139,8 +139,10 @@ export default function DatasetsView({ datasets, activeId, busy, onFile, onOpen,
             <UploadZone onFile={onFile} busy={busy} />
 
             <section className="shelf">
-                <SectionTitle strong="Your datasets." soft={datasets.length ? 'Pick one to explore.' : 'Nothing here yet.'} />
-                {datasets.length === 0 ? (
+                <SectionTitle strong="Your datasets." soft={datasets.length ? 'Pick one to explore.' : loading ? 'Loading…' : 'Nothing here yet.'} />
+                {loading && datasets.length === 0 ? (
+                    <EmptyState icon={Loader2} title="Loading your saved datasets…" />
+                ) : datasets.length === 0 ? (
                     <EmptyState icon={FileSpreadsheet} title="Upload a CSV, or start with sample data.">
                         <button type="button" className="btn btn--secondary" onClick={onSample}>
                             Load sample phone sales

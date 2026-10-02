@@ -1,4 +1,4 @@
-import { analyzeDataset, formatNumber, histogram, medianOfSorted, pairKey, pearson, quantileOfSorted } from '../analysis';
+import { analyzeDataset, evenSample, formatNumber, histogram, medianOfSorted, pairKey, pearson, quantileOfSorted } from '../analysis';
 import { answer } from '../assistant';
 import { buildNotebook, buildPythonTemplate, buildReport } from '../exporters';
 import { predictiveSummary, qualitySummary } from '../blueprints';
@@ -33,6 +33,15 @@ describe('statistics helpers', () => {
         expect(bins).toHaveLength(5);
         expect(bins.reduce((a, b) => a + b.count, 0)).toBe(6);
         expect(histogram([7, 7, 7])).toEqual([expect.objectContaining({ count: 3 })]);
+    });
+
+    test('evenSample spans the whole input', () => {
+        const rows = Array.from({ length: 1000 }, (_, i) => i);
+        const sample = evenSample(rows, 10);
+        expect(sample).toHaveLength(10);
+        expect(sample[0]).toBe(0);
+        expect(sample[9]).toBe(900);
+        expect(evenSample(rows, 5000)).toBe(rows);
     });
 
     test('formatNumber handles edge cases', () => {

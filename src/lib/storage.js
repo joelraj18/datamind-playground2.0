@@ -55,7 +55,89 @@ export function signIn({ email, password }) {
     return publicProfile(user);
 }
 
-export const loadDatasets = (email) => read(datasetsKey(email), []);
+/* ---------- Datasets ----------
+ * Datasets live in IndexedDB, which can hold hundreds of megabytes (a million-row CSV is
+ * fine). localStorage, capped at ~5 MB, is only used where IndexedDB is unavailable.
+ * Each dataset is its own record, so adding or deleting one never rewrites the others.
+ */
 
-/** Persists datasets; returns false if they were too large to save. */
-export const saveDatasets = (email, datasets) => write(datasetsKey(email), datasets);
+const DB_NAME = 'datamind';
+const STORE = 'datasets';
+const recordKey = (email, id) => `${email}:${id}`;
+
+let dbPromise = null;
+const openDb = () => {
+    if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+    if (!dbPromise) {
+        dbPromise = new Promise((resolve) => {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = () => {
+                const store = req.result.createObjectStore(STORE, { keyPath: 'key' });
+                store.createIndex('owner', 'owner');
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null); // e.g. disabled in private mode
+        });
+    }
+    return dbPromise;
+};
+
+const run = (db, mode, fn) =>
+    new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, mode);
+        const result = fn(tx.objectStore(STORE));
+        tx.oncomplete = () => resolve(result?.result);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+    });
+
+const toRecord = (email, dataset) => ({ ...dataset, key: recordKey(email, dataset.id), owner: email });
+const fromRecord = ({ key, owner, ...dataset }) => dataset;
+
+export async function loadDatasets(email) {
+    const db = await openDb();
+    const legacy = read(datasetsKey(email), []);
+    if (!db) return legacy;
+
+    // One-time migration of datasets saved by earlier versions in localStorage.
+    if (legacy.length) {
+        try {
+            await run(db, 'readwrite', (store) => legacy.forEach((d) => store.put(toRecord(email, d))));
+            localStorage.removeItem(datasetsKey(email));
+        } catch {
+            return legacy;
+        }
+    }
+
+    try {
+        const records = await run(db, 'readonly', (store) => store.index('owner').getAll(email));
+        return records.map(fromRecord).sort((a, b) => a.id - b.id);
+    } catch {
+        return [];
+    }
+}
+
+/** Persists one dataset; resolves false if the browser refused (quota exceeded or storage disabled). */
+export async function saveDataset(email, dataset) {
+    const db = await openDb();
+    if (!db) return write(datasetsKey(email), [...read(datasetsKey(email), []), dataset]);
+    try {
+        await run(db, 'readwrite', (store) => store.put(toRecord(email, dataset)));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export async function deleteDataset(email, id) {
+    const db = await openDb();
+    if (!db) {
+        write(datasetsKey(email), read(datasetsKey(email), []).filter((d) => d.id !== id));
+        return;
+    }
+    try {
+        await run(db, 'readwrite', (store) => store.delete(recordKey(email, id)));
+    } catch {
+        // Nothing to clean up if the record was never stored.
+    }
+}

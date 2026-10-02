@@ -15,7 +15,8 @@ const TOAST_MS = 4500;
 
 export default function DataMind() {
     const [user, setUser] = useState(storage.getSessionUser);
-    const [datasets, setDatasets] = useState(() => (user ? storage.loadDatasets(user.email) : []));
+    const [datasets, setDatasets] = useState([]);
+    const [loadingDatasets, setLoadingDatasets] = useState(false);
     const [activeId, setActiveId] = useState(null);
     const [view, setView] = useState('datasets');
     const [explorerTab, setExplorerTab] = useState('univariate');
@@ -38,11 +39,27 @@ export default function DataMind() {
         window.scrollTo?.(0, 0);
     }, [view]);
 
+    const email = user?.email;
+    useEffect(() => {
+        if (!email) return undefined;
+        let cancelled = false;
+        setLoadingDatasets(true);
+        storage.loadDatasets(email).then((saved) => {
+            if (cancelled) return;
+            // Keep anything added while loading (e.g. a sample opened straight away).
+            setDatasets((current) => [...saved, ...current.filter((d) => !saved.some((s) => s.id === d.id))]);
+            setLoadingDatasets(false);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [email]);
+
     /* ---------- Session ---------- */
 
     const startSession = (profile, greeting) => {
         setUser(profile);
-        setDatasets(storage.loadDatasets(profile.email));
+        setDatasets([]);
         setActiveId(null);
         setView('datasets');
         notify(greeting, 'success');
@@ -59,8 +76,6 @@ export default function DataMind() {
 
     /* ---------- Datasets ---------- */
 
-    const persist = (next) => storage.saveDatasets(user.email, next.filter((d) => !d.unsaved));
-
     const openDataset = (dataset) => {
         if (dataset.id !== activeId) {
             setActiveId(dataset.id);
@@ -71,16 +86,16 @@ export default function DataMind() {
     };
 
     const addDataset = (dataset) => {
-        let next = [...datasets, dataset];
-        if (!persist(next)) {
-            // Browser storage is full (usually ~5 MB). Keep the dataset for this session only.
-            next = [...datasets, { ...dataset, unsaved: true }];
-            notify(`“${dataset.name}” is too large to save in the browser, so it’s available for this session only.`, 'info');
-        } else {
-            notify(`“${dataset.name}” is ready to explore.`, 'success');
-        }
-        setDatasets(next);
+        setDatasets((current) => [...current, dataset]);
         openDataset(dataset);
+        notify(`“${dataset.name}” is ready to explore.`, 'success');
+
+        storage.saveDataset(user.email, dataset).then((saved) => {
+            if (saved) return;
+            // Browser storage is full or disabled. Keep the dataset for this session only.
+            setDatasets((current) => current.map((d) => (d.id === dataset.id ? { ...d, unsaved: true } : d)));
+            notify(`“${dataset.name}” couldn’t be saved in this browser, so it’s available for this session only.`, 'info');
+        });
     };
 
     const handleFile = (file) => {
@@ -122,9 +137,8 @@ export default function DataMind() {
 
     const deleteDataset = (dataset) => {
         if (!window.confirm(`Delete “${dataset.name}”? This can’t be undone.`)) return;
-        const next = datasets.filter((d) => d.id !== dataset.id);
-        persist(next);
-        setDatasets(next);
+        storage.deleteDataset(user.email, dataset.id);
+        setDatasets((current) => current.filter((d) => d.id !== dataset.id));
         if (dataset.id === activeId) {
             setActiveId(null);
             setMessages([]);
@@ -177,6 +191,7 @@ export default function DataMind() {
                         datasets={datasets}
                         activeId={activeId}
                         busy={busy}
+                        loading={loadingDatasets}
                         onFile={handleFile}
                         onOpen={openDataset}
                         onDelete={deleteDataset}
@@ -193,7 +208,7 @@ export default function DataMind() {
 
             <footer className="footer">
                 <p>
-                    DataMind runs entirely in your browser. Statistics are computed on up to 110,000 rows; exports always include every row.
+                    DataMind runs entirely in your browser. Large files are analysed on an even 110,000-row sample; counts and exports always include every row.
                 </p>
                 <p className="footer__fine">Built with React, Recharts and PapaParse.</p>
             </footer>

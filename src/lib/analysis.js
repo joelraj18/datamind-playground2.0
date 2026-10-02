@@ -178,6 +178,16 @@ const groupStats = (rows, catCol, numCol) => {
         .sort((a, b) => b.mean - a.mean);
 };
 
+/**
+ * Evenly spaced systematic sample, so sorted files (by date, ID, region…) are still
+ * represented end to end rather than only by their first rows.
+ */
+export const evenSample = (rows, size) => {
+    if (rows.length <= size) return rows;
+    const step = rows.length / size;
+    return Array.from({ length: size }, (_, i) => rows[Math.floor(i * step)]);
+};
+
 /** Key used to look up a categorical-vs-numeric breakdown. */
 export const pairKey = (catCol, numCol) => `${catCol}\u0000${numCol}`;
 
@@ -190,7 +200,7 @@ export function analyzeDataset(dataset) {
 
     const { columns } = dataset;
     const sampled = dataset.data.length > MAX_ANALYSIS_ROWS;
-    const rows = sampled ? dataset.data.slice(0, MAX_ANALYSIS_ROWS) : dataset.data;
+    const rows = sampled ? evenSample(dataset.data, MAX_ANALYSIS_ROWS) : dataset.data;
     const recordCount = rows.length;
 
     const stats = {};
