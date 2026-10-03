@@ -1,7 +1,7 @@
 // Rule-based assistant that answers questions from the precomputed analysis.
 // Runs entirely in the browser; no data is sent anywhere.
 
-import { STRONG_CORRELATION, approx, formatNumber, formatPct } from './analysis';
+import { STRONG_CORRELATION, approx, formatDate, formatNumber, formatPct } from './analysis';
 import { measureCols } from './blueprints';
 
 export const SUGGESTED_QUESTIONS = [
@@ -104,7 +104,7 @@ export function answer(rawQuery, analysis) {
             const i = tl.counts.reduce((best, c, k) => (c > tl.counts[best] ? k : best), 0);
             busiest = ` The busiest day was **${dayLabel(tl.days[i])}** with ${formatNumber(tl.counts[i])} records.`;
         }
-        return `**${col}** runs from **${s.min}** to **${s.max}** (${formatNumber(s.spanDays)} days).${busiest}`;
+        return `**${col}** runs from **${formatDate(s.min)}** to **${formatDate(s.max)}** (${formatNumber(s.spanDays)} days).${busiest}`;
     }
 
     if (has(query, 'category', 'categories', 'mode', 'frequent', 'common', 'top')) {
@@ -144,5 +144,5 @@ export function answer(rawQuery, analysis) {
 }
 
 function dayLabel(day) {
-    return new Date(day * 864e5).toISOString().slice(0, 10);
+    return formatDate(new Date(day * 864e5).toISOString().slice(0, 10));
 }

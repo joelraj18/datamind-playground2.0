@@ -33,9 +33,9 @@ export function CorrelationTab({ analysis }) {
                     title: 'Correlation matrix (Pearson’s r)',
                     subtitle: `${displayName(meta.fileName)} · ${meta.rows.toLocaleString()} rows · each pair uses every row where both have values`,
                     legend: [
-                        { label: 'r = −1: move in opposite directions', color: divergingColor(-1) },
-                        { label: 'r = 0: no linear relation', color: divergingColor(0) },
-                        { label: 'r = +1: move together', color: divergingColor(1) },
+                        { label: 'r near minus 1: move in opposite directions', color: divergingColor(-1) },
+                        { label: 'r near 0: no linear relation', color: divergingColor(0) },
+                        { label: 'r near 1: move together', color: divergingColor(1) },
                     ],
                     rows: cols.map((row) => ({ Column: row, ...Object.fromEntries(cols.map((c) => [c, lookup(row, c)])) })),
                 })}
@@ -44,7 +44,7 @@ export function CorrelationTab({ analysis }) {
             </ChartCard>
             <Card title={`Most related pairs (|r| > ${NOTABLE_CORRELATION})`}>
                 {top.length === 0 ? (
-                    <p className="text-muted">No pairs above |r| = {NOTABLE_CORRELATION}. Relationships here are weak or non-linear.</p>
+                    <p className="text-muted">No pairs above |r| = {NOTABLE_CORRELATION}. Relationships here are weak or not linear.</p>
                 ) : (
                     <ul className="pair-list">
                         {top.map((c) => (
@@ -122,7 +122,7 @@ function ScatterSection({ analysis }) {
         >
             {fit && Number.isFinite(fit.slope) && (
                 <p className="card__sub">
-                    r = <strong>{fit.r.toFixed(3)}</strong> · Trend: {y} ≈ <strong>{formatNumber(fit.intercept, 4)}</strong> {fit.slope < 0 ? '−' : '+'} <strong>{formatNumber(Math.abs(fit.slope), 4)}</strong> × {x}
+                    r = <strong>{fit.r.toFixed(3)}</strong> · Trend: {y} ≈ <strong>{formatNumber(fit.intercept, 4)}</strong> {fit.slope < 0 ? 'minus' : 'plus'} <strong>{formatNumber(Math.abs(fit.slope), 4)}</strong> × {x}
                 </p>
             )}
             <div className="chart-legend" aria-hidden="true">

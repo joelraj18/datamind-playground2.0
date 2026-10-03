@@ -108,8 +108,8 @@ export function histogramFromEdges(dist, edges, integer) {
         const a = edges[i];
         const b = edges[i + 1];
         let label;
-        if (integer) label = b - 1 > a ? `${formatEdge(a)}–${formatEdge(i === last ? b : b - 1)}` : formatEdge(a);
-        else label = `${formatEdge(a)}–${formatEdge(b)}`;
+        if (integer) label = b - 1 > a ? `${formatEdge(a)} to ${formatEdge(i === last ? b : b - 1)}` : formatEdge(a);
+        else label = `${formatEdge(a)} to ${formatEdge(b)}`;
         bins.push({ start: a, end: b, count: upto - before, label, closed: i === last });
         before = upto;
     }
@@ -491,7 +491,22 @@ function buildInsights(analysis) {
 
 /* ---------- Entry point ---------- */
 
-export function finalize(merged, plan, meta) {
+/**
+ * Column names for display: underscores and hyphens become spaces ("created_at" → "created at").
+ * Names stay unique; the originals are kept in `meta.sourceColumns` for generated code.
+ */
+export function displayColumnNames(names) {
+    const used = new Set();
+    return names.map((raw) => {
+        let name = raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim() || raw;
+        for (let k = 2; used.has(name); k++) name = `${raw.replace(/[_-]+/g, ' ').trim() || raw} (${k})`;
+        used.add(name);
+        return name;
+    });
+}
+
+export function finalize(merged, sourcePlan, meta) {
+    const plan = { ...sourcePlan, columns: displayColumnNames(sourcePlan.columns) };
     const { columns } = plan;
     const rows = merged.rows;
     const stats = {};
@@ -570,6 +585,7 @@ export function finalize(merged, plan, meta) {
             rows,
             columns: columns.length,
             delimiter: String.fromCharCode(plan.delimiter),
+            sourceColumns: sourcePlan.columns,
             malformedRows: merged.malformed,
             exactStats: approxColumns.length === 0,
             approxColumns,

@@ -3,7 +3,7 @@ import { ChartCard, Segmented, SelectPill } from '../../components/ChartCard';
 import { CategoryBarsChart, CategoryDonut, EcdfChart, HistogramChart, QQChart, TimelineChart, ValueBarsChart, donutSlices } from '../../components/charts';
 import { BoxPlotChart } from '../../components/svgCharts';
 import { Callout, Card, DataTable, EmptyState, SectionTitle } from '../../components/ui';
-import { approx, formatNumber, formatPct } from '../../lib/analysis';
+import { approx, formatDate, formatNumber, formatPct } from '../../lib/analysis';
 import { measureCols } from '../../lib/blueprints';
 import { GLOSSARY } from '../../lib/glossary';
 import { CHART } from '../../lib/palette';
@@ -181,7 +181,7 @@ function TimelineCard({ column, stat, timeline, measures }) {
 
     return (
         <ChartCard
-            eyebrow={`${stat.min} to ${stat.max}`}
+            eyebrow={`${formatDate(stat.min)} to ${formatDate(stat.max)}`}
             title={column}
             info={GLOSSARY.timeline}
             getExport={() => ({

@@ -11,6 +11,20 @@ export const correlationBetween = (correlations, a, b) => {
     return hit ? hit.correlation : 0;
 };
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2024-01-31" → "31 Jan 2024" for display; anything else is returned unchanged. */
+export function formatDate(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : iso;
+}
+
+/** The column's name in the original file (display names replace underscores with spaces). */
+export function sourceName(analysis, column) {
+    const i = analysis.columns.indexOf(column);
+    return analysis.meta.sourceColumns?.[i] ?? column;
+}
+
 /** A file name for headings: no extension, and underscores or hyphens shown as spaces. */
 export const displayName = (fileName = '') =>
     fileName

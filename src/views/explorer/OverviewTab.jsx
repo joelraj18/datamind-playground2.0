@@ -1,7 +1,7 @@
 import React from 'react';
 import { CalendarDays, Hash, Type } from 'lucide-react';
 import { Callout, Card, SectionTitle } from '../../components/ui';
-import { approx, formatBytes, formatDuration, formatNumber, formatPct } from '../../lib/analysis';
+import { approx, formatBytes, formatDate, formatDuration, formatNumber, formatPct } from '../../lib/analysis';
 import { GLOSSARY } from '../../lib/glossary';
 
 const TYPE_ICON = { numeric: Hash, categorical: Type, date: CalendarDays };
@@ -12,7 +12,7 @@ function summary(stat) {
         if (stat.empty) return 'No numeric values';
         return `${formatNumber(stat.min)} to ${formatNumber(stat.max)} · mean ${formatNumber(stat.mean)} · median ${approx(stat.exact)}${formatNumber(stat.median)}`;
     }
-    if (stat.type === 'date') return stat.min ? `${stat.min} to ${stat.max}` : 'No readable dates';
+    if (stat.type === 'date') return stat.min ? `${formatDate(stat.min)} to ${formatDate(stat.max)}` : 'No readable dates';
     return `Most common: ${stat.mode} (${formatPct(stat.modePct)})`;
 }
 

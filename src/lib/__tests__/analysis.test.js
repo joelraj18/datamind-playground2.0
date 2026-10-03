@@ -1,5 +1,5 @@
 import { analyzeFile } from '../../engine';
-import { formatBytes, formatCompact, formatDuration, formatNumber } from '../analysis';
+import { formatBytes, formatCompact, formatDate, formatDuration, formatNumber } from '../analysis';
 import { answer } from '../assistant';
 import { guessTarget, measureCols, predictiveSummary, qualitySummary } from '../blueprints';
 import { buildNotebook, buildPythonTemplate, buildReport } from '../exporters';
@@ -53,6 +53,20 @@ describe('assistant', () => {
         expect(answer('percentiles of price', analysis)).toContain('P90');
         expect(answer('where are the outliers?', analysis)).toMatch(/1\.5 × IQR/);
         expect(answer('when did orders happen', analysis)).toContain('**OrderDate**');
+    });
+});
+
+describe('display names', () => {
+    test('underscores and hyphens read as spaces, but generated code keeps the real names', async () => {
+        const rows = Array.from({ length: 40 }, (_, i) => `${i % 7},${(i * 3) % 11},${i % 2 ? 'x' : 'y'},2024-0${1 + (i % 9)}-15`);
+        const blob = new Blob([`unit_price,unit-count,store_type,order_date\n${rows.join('\n')}\n`]);
+        const a = await analyzeFile(blob);
+        expect(a.columns).toEqual(['unit price', 'unit count', 'store type', 'order date']);
+        expect(a.meta.sourceColumns).toEqual(['unit_price', 'unit-count', 'store_type', 'order_date']);
+        const template = buildPythonTemplate(a);
+        expect(template).toContain("numerical_cols = ['unit_price', 'unit-count']");
+        expect(template).toContain("date_cols = ['order_date']");
+        expect(formatDate('2024-01-31')).toBe('31 Jan 2024');
     });
 });
 
