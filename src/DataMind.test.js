@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import DataMind from './DataMind';
 
 // Recharts' ResponsiveContainer needs ResizeObserver, which jsdom lacks.
@@ -13,8 +13,7 @@ beforeAll(() => {
 
 beforeEach(() => localStorage.clear());
 
-test('register, load sample data, explore and ask a question', () => {
-    jest.useFakeTimers();
+test('register, analyse the sample, explore every view and ask a question', async () => {
     render(<DataMind />);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Create account' }));
@@ -27,17 +26,32 @@ test('register, load sample data, explore and ask a question', () => {
     expect(JSON.parse(localStorage.getItem('datamind_current_user'))).not.toHaveProperty('password');
 
     fireEvent.click(screen.getByRole('button', { name: /Try a sample dataset/ }));
-    expect(screen.getByRole('heading', { name: 'sample_phone_sales' })).toBeInTheDocument();
+    expect(await screen.findByText(/rows read/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'sample_phone_sales' }, { timeout: 15000 })).toBeInTheDocument();
+    expect(screen.getAllByText(/All 20,000 rows analysed/).length).toBeGreaterThan(0);
+
+    // Overview: column catalogue and preview.
+    expect(screen.getByRole('tabpanel', { name: 'Overview' })).toHaveTextContent('OrderDate');
+
+    // Univariate: every chart type on the first numeric card.
+    fireEvent.click(screen.getByRole('tab', { name: 'Univariate' }));
+    const firstCard = screen.getAllByRole('radiogroup', { name: /Chart type for StorageGB/ })[0];
+    for (const view of ['Box plot', 'Cumulative', 'Q-Q', 'Histogram']) {
+        fireEvent.click(within(firstCard).getByRole('radio', { name: view }));
+        expect(within(firstCard).getByRole('radio', { name: view })).toHaveAttribute('aria-checked', 'true');
+    }
+    expect(screen.getAllByRole('button', { name: /Download/ }).length).toBeGreaterThan(3);
 
     for (const tab of ['Correlation', 'Bivariate', 'Insights', 'Decision Center', 'Data Quality', 'Segmentation', 'Predictive', 'Python Template']) {
         fireEvent.click(screen.getByRole('tab', { name: tab }));
         expect(screen.getByRole('tabpanel', { name: tab })).toBeInTheDocument();
     }
 
+    jest.useFakeTimers();
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     fireEvent.change(screen.getByLabelText('Your question'), { target: { value: 'average of price' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     act(() => jest.advanceTimersByTime(1000));
     expect(screen.getByText(/The average of/)).toBeInTheDocument();
     jest.useRealTimers();
-});
+}, 30000);

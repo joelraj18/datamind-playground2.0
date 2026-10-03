@@ -1,182 +1,14 @@
 import React, { useState } from 'react';
-import { Check, Copy, Gem, TrendingDown, TrendingUp, Users } from 'lucide-react';
-import { CategoryDonut, CorrelationMatrix, GroupComparisonChart, Histogram } from '../../components/charts';
+import { Check, Copy, Gem, Users } from 'lucide-react';
+import { ChartCard } from '../../components/ChartCard';
+import { MissingChart } from '../../components/charts';
 import { Callout, Card, DataTable, EmptyState, InfoTip, RichText, SectionTitle, StatTile } from '../../components/ui';
-import { NOTABLE_CORRELATION, STRONG_CORRELATION, formatNumber, formatPct, pairKey } from '../../lib/analysis';
-import { decisionSummary, guessTarget, predictiveSummary, qualitySummary, segmentationSummary } from '../../lib/blueprints';
+import { STRONG_CORRELATION, formatNumber, formatPct } from '../../lib/analysis';
+import { decisionSummary, predictiveSummary, qualitySummary, segmentationSummary } from '../../lib/blueprints';
 import { buildPythonTemplate } from '../../lib/exporters';
 import { GLOSSARY } from '../../lib/glossary';
 
 const cvTone = (cv) => (cv == null ? '' : cv > 75 ? 'text-warn' : cv > 50 ? 'text-caution' : '');
-
-/* ---------- Univariate ---------- */
-
-export function UnivariateTab({ analysis }) {
-    const { stats, numericCols, categoricalCols, chartableCatCols, distributions, categoricalDists } = analysis;
-    const skipped = categoricalCols.filter((c) => !chartableCatCols.includes(c));
-
-    const columns = [
-        { key: 'col', label: 'Feature' },
-        { key: 'mean', label: 'Mean', numeric: true, info: GLOSSARY.mean, render: (r) => formatNumber(r.mean) },
-        { key: 'median', label: 'Median', numeric: true, info: GLOSSARY.median, render: (r) => formatNumber(r.median) },
-        { key: 'std', label: 'Std dev', numeric: true, info: GLOSSARY.std, render: (r) => formatNumber(r.std) },
-        { key: 'cv', label: 'CV', numeric: true, info: GLOSSARY.cv, render: (r) => <span className={cvTone(r.cv)}>{r.cv == null ? '—' : formatPct(r.cv)}</span> },
-        { key: 'min', label: 'Min', numeric: true, info: GLOSSARY.min, render: (r) => formatNumber(r.min) },
-        { key: 'max', label: 'Max', numeric: true, info: GLOSSARY.max, render: (r) => formatNumber(r.max) },
-        { key: 'missingPct', label: 'Missing', numeric: true, info: GLOSSARY.missing, render: (r) => <span className={r.missingPct > 0 ? 'text-warn' : 'text-muted'}>{formatPct(r.missingPct)}</span> },
-    ];
-
-    return (
-        <div className="stack-xl">
-            <section>
-                <SectionTitle strong="Numbers." soft="Center, spread and shape of every numeric column." />
-                {numericCols.length === 0 ? (
-                    <EmptyState title="No numeric columns found." />
-                ) : (
-                    <>
-                        <Card>
-                            <DataTable columns={columns} rows={numericCols.map((col) => ({ col, ...stats[col] }))} rowKey={(r) => r.col} />
-                        </Card>
-                        <div className="grid grid--2">
-                            {numericCols.map((col) => (
-                                <Card key={col} eyebrow="Distribution" title={col} info={GLOSSARY.histogram}>
-                                    <p className="card__sub">
-                                        Mean <strong>{formatNumber(stats[col].mean)}</strong> · Median <strong>{formatNumber(stats[col].median)}</strong> · IQR{' '}
-                                        <strong>{formatNumber(stats[col].iqr)}</strong>
-                                    </p>
-                                    <Histogram data={distributions[col]} label={col} />
-                                </Card>
-                            ))}
-                        </div>
-                    </>
-                )}
-            </section>
-
-            <section>
-                <SectionTitle strong="Categories." soft="How records split across each label." />
-                {chartableCatCols.length === 0 ? (
-                    <EmptyState title="No categorical columns with 2–14 distinct values to chart." />
-                ) : (
-                    <div className="grid grid--2">
-                        {chartableCatCols.map((col) => (
-                            <Card key={col} eyebrow={`${stats[col].unique} categories`} title={col} info={GLOSSARY.donut}>
-                                <p className="card__sub">
-                                    Most common <strong>{stats[col].mode}</strong> ({formatPct(stats[col].modePct)}) · Missing {formatPct(stats[col].missingPct)}
-                                </p>
-                                <CategoryDonut data={categoricalDists[col]} label={col} />
-                            </Card>
-                        ))}
-                    </div>
-                )}
-                {skipped.length > 0 && (
-                    <Callout title="Some text columns aren’t charted">
-                        {skipped.map((c) => `${c} (${stats[c].unique.toLocaleString()} distinct)`).join(', ')} — too many or too few distinct values for a
-                        meaningful breakdown. Check the Data Quality tab for likely ID columns.
-                    </Callout>
-                )}
-            </section>
-        </div>
-    );
-}
-
-/* ---------- Correlation ---------- */
-
-export function CorrelationTab({ analysis }) {
-    const { numericCols, correlations } = analysis;
-    if (numericCols.length < 2) return <EmptyState title="Correlation needs at least two numeric columns." />;
-    const top = correlations.filter((c) => Math.abs(c.correlation) > NOTABLE_CORRELATION).slice(0, 8);
-
-    return (
-        <div className="stack-xl">
-            <SectionTitle strong="Correlation." soft="Which columns move together." info={GLOSSARY.correlation} />
-            <Card title="Correlation matrix" eyebrow="Pearson’s r">
-                <CorrelationMatrix columns={numericCols} correlations={correlations} />
-            </Card>
-            <Card title={`Most related pairs (|r| > ${NOTABLE_CORRELATION})`}>
-                {top.length === 0 ? (
-                    <p className="text-muted">No pairs above |r| = {NOTABLE_CORRELATION}. Relationships here are weak or non-linear.</p>
-                ) : (
-                    <ul className="pair-list">
-                        {top.map((c) => (
-                            <li key={`${c.col1}-${c.col2}`}>
-                                <span>
-                                    <strong>{c.col1}</strong> and <strong>{c.col2}</strong>
-                                </span>
-                                <span className={`pill ${c.correlation > 0 ? 'pill--pos' : 'pill--neg'}`}>
-                                    {c.correlation > 0 ? <TrendingUp aria-hidden="true" /> : <TrendingDown aria-hidden="true" />}
-                                    r = {c.correlation.toFixed(2)} · {Math.abs(c.correlation) > STRONG_CORRELATION ? 'strong' : 'moderate'}
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </Card>
-            <Callout title="Correlation is not causation">
-                A high r means two columns tend to move together. It doesn’t tell you that one causes the other — a third factor may drive both.
-            </Callout>
-        </div>
-    );
-}
-
-/* ---------- Bivariate ---------- */
-
-export function BivariateTab({ analysis }) {
-    const { chartableCatCols, numericCols, bivariate } = analysis;
-    const [catCol, setCatCol] = useState(chartableCatCols[0]);
-    const [numCol, setNumCol] = useState(() => guessTarget(numericCols));
-
-    if (!chartableCatCols.length || !numericCols.length) {
-        return <EmptyState title="Bivariate analysis needs a numeric column and a categorical column with 2–14 values." />;
-    }
-
-    const data = bivariate[pairKey(catCol, numCol)] || [];
-    const columns = [
-        { key: 'category', label: catCol },
-        { key: 'count', label: 'Records', numeric: true, render: (r) => r.count.toLocaleString() },
-        { key: 'mean', label: 'Mean', numeric: true, info: GLOSSARY.mean, render: (r) => formatNumber(r.mean) },
-        { key: 'median', label: 'Median', numeric: true, info: GLOSSARY.median, render: (r) => formatNumber(r.median) },
-        { key: 'min', label: 'Min', numeric: true, render: (r) => formatNumber(r.min) },
-        { key: 'max', label: 'Max', numeric: true, render: (r) => formatNumber(r.max) },
-    ];
-
-    return (
-        <div className="stack-xl">
-            <SectionTitle strong="Compare groups." soft="See how a category shifts a number." info={GLOSSARY.bivariate} />
-            <div className="filters">
-                <label className="select">
-                    <span>Group by</span>
-                    <select value={catCol} onChange={(e) => setCatCol(e.target.value)}>
-                        {chartableCatCols.map((c) => (
-                            <option key={c}>{c}</option>
-                        ))}
-                    </select>
-                </label>
-                <label className="select">
-                    <span>Measure</span>
-                    <select value={numCol} onChange={(e) => setNumCol(e.target.value)}>
-                        {numericCols.map((c) => (
-                            <option key={c}>{c}</option>
-                        ))}
-                    </select>
-                </label>
-            </div>
-            <Card eyebrow={`${numCol} by ${catCol}`} title="Mean and median per group">
-                <div className="chart-legend" aria-hidden="true">
-                    <span>
-                        <i className="key key--bar" /> Mean
-                    </span>
-                    <span>
-                        <i className="key key--dot" /> Median
-                    </span>
-                </div>
-                <GroupComparisonChart data={data} catCol={catCol} numCol={numCol} />
-            </Card>
-            <Card title="Group table">
-                <DataTable columns={columns} rows={data} rowKey={(r) => r.category} />
-            </Card>
-        </div>
-    );
-}
 
 /* ---------- Insights ---------- */
 
@@ -266,37 +98,58 @@ export function DecisionTab({ analysis }) {
 
 export function QualityTab({ analysis }) {
     const { missing, highCardinality, inconsistent, completeness } = qualitySummary(analysis);
-    const { recordCount, numericCols, categoricalCols } = analysis;
+    const { meta, numericCols, categoricalCols, dateCols, stats, numericDetails } = analysis;
+    const invalid = numericCols.filter((c) => stats[c].invalid > 0);
 
     return (
         <div className="stack-xl">
             <SectionTitle strong="Data quality." soft="A health check before you trust the numbers." info={GLOSSARY.quality} />
             <div className="grid grid--3">
-                <StatTile label="Completeness" value={formatPct(completeness)} tone={completeness === 100 ? 'good' : 'warn'} info={GLOSSARY.completeness} />
-                <StatTile label="Records analysed" value={recordCount.toLocaleString()} info={GLOSSARY.records} />
-                <StatTile label="Column types" value={`${numericCols.length} · ${categoricalCols.length}`} hint="numeric · categorical" info={GLOSSARY.numeric} />
+                <StatTile label="Completeness" value={formatPct(completeness, 2)} tone={completeness === 100 ? 'good' : 'warn'} info={GLOSSARY.completeness} />
+                <StatTile label="Rows analysed" value={meta.rows.toLocaleString()} hint={meta.malformedRows ? `${formatNumber(meta.malformedRows)} malformed` : 'all well-formed'} info={GLOSSARY.records} />
+                <StatTile
+                    label="Column types"
+                    value={`${numericCols.length} · ${categoricalCols.length}${dateCols.length ? ` · ${dateCols.length}` : ''}`}
+                    hint={`numeric · text${dateCols.length ? ' · date' : ''}`}
+                    info={GLOSSARY.numeric}
+                />
             </div>
 
+            {missing.length > 0 ? (
+                <ChartCard
+                    eyebrow={`${missing.length} of ${analysis.columns.length} columns affected`}
+                    title="Missing and unusable values"
+                    info={GLOSSARY.missing}
+                    exact
+                    getExport={() => ({
+                        filename: 'missing_values',
+                        title: 'Missing and unusable values per column',
+                        subtitle: `${meta.fileName} · ${meta.rows.toLocaleString()} rows`,
+                        rows: missing.map((m) => ({ column: m.col, unusable_cells: m.rows, not_numeric: m.invalid, share_pct: m.pct })),
+                    })}
+                    minHeight={140}
+                >
+                    <MissingChart rows={missing} />
+                </ChartCard>
+            ) : (
+                <Callout tone="success" title="100% complete">
+                    Every column has a usable value in every row.
+                </Callout>
+            )}
+
             <div className="grid grid--3">
-                <Card title="Missing values" info={GLOSSARY.missing}>
-                    {missing.length ? (
-                        <ul className="meter-list">
-                            {missing.map((m) => (
-                                <li key={m.col}>
-                                    <span className="meter-list__label">
-                                        <strong>{m.col}</strong>
-                                        <span className="text-muted">
-                                            {formatPct(m.pct)} · {m.rows.toLocaleString()} rows
-                                        </span>
-                                    </span>
-                                    <span className="meter">
-                                        <span style={{ width: `${Math.max(m.pct, 1)}%` }} />
-                                    </span>
+                <Card title="Values that aren’t numbers" info={GLOSSARY.invalid}>
+                    {invalid.length ? (
+                        <ul className="plain-list">
+                            {invalid.map((c) => (
+                                <li key={c}>
+                                    <strong>{c}</strong> <span className="text-warn">{formatNumber(stats[c].invalid)}</span>
+                                    {numericDetails[c].invalidExamples.length > 0 && <span className="text-muted">e.g. “{numericDetails[c].invalidExamples.slice(0, 3).join('”, “')}”</span>}
                                 </li>
                             ))}
                         </ul>
                     ) : (
-                        <p className="text-muted">100% complete. No missing values.</p>
+                        <p className="text-muted">Every numeric column contains only numbers.</p>
                     )}
                 </Card>
                 <Card title="Inconsistent features" info={GLOSSARY.cv}>
@@ -322,7 +175,7 @@ export function QualityTab({ analysis }) {
                             ))}
                         </ul>
                     ) : (
-                        <p className="text-muted">No text column is more than 80% unique.</p>
+                        <p className="text-muted">No column looks like an identifier.</p>
                     )}
                 </Card>
             </div>
@@ -483,8 +336,8 @@ export function TemplateTab({ analysis }) {
                 </pre>
             </Card>
             <p className="footnote">
-                Requires pandas, numpy, matplotlib and seaborn. Uncomment the <code>read_csv</code> line and point it at your file.
-                <InfoTip text="Install with: pip install pandas numpy matplotlib seaborn" />
+                Requires pandas, numpy, matplotlib, seaborn and scipy. Uncomment the <code>read_csv</code> line and point it at your file.
+                <InfoTip text="Install with: pip install pandas numpy matplotlib seaborn scipy" />
             </p>
         </div>
     );

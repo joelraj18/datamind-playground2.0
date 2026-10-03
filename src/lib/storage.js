@@ -56,10 +56,13 @@ export function signIn({ email, password }) {
 }
 
 /* ---------- Datasets ----------
- * Datasets live in IndexedDB, which can hold hundreds of megabytes (a million-row CSV is
- * fine). localStorage, capped at ~5 MB, is only used where IndexedDB is unavailable.
- * Each dataset is its own record, so adding or deleting one never rewrites the others.
+ * A dataset record holds its analysis (a few hundred KB, whatever the file size) and, when the
+ * browser allows, the original file so it can be downloaded again. Records live in IndexedDB;
+ * localStorage (~5 MB) is only a fallback where IndexedDB is unavailable.
  */
+
+/** Files above this are not copied into browser storage; their analysis still is. */
+export const MAX_STORED_FILE_BYTES = 512 * 1024 * 1024;
 
 const DB_NAME = 'datamind';
 const STORE = 'datasets';
@@ -117,13 +120,26 @@ export async function loadDatasets(email) {
     }
 }
 
-/** Persists one dataset; resolves false if the browser refused (quota exceeded or storage disabled). */
+/**
+ * Persists one dataset. Resolves 'full' (analysis + file), 'analysis' (file too large or refused)
+ * or false (nothing could be stored).
+ */
 export async function saveDataset(email, dataset) {
     const db = await openDb();
-    if (!db) return write(datasetsKey(email), [...read(datasetsKey(email), []), dataset]);
+    const { file, ...summary } = dataset;
+    if (!db) return write(datasetsKey(email), [...read(datasetsKey(email), []), summary]) ? 'analysis' : false;
+    const put = (record) => run(db, 'readwrite', (store) => store.put(toRecord(email, record)));
+    if (file && file.size <= MAX_STORED_FILE_BYTES) {
+        try {
+            await put({ ...summary, file });
+            return 'full';
+        } catch {
+            // Quota exceeded: fall back to the analysis alone.
+        }
+    }
     try {
-        await run(db, 'readwrite', (store) => store.put(toRecord(email, dataset)));
-        return true;
+        await put(summary);
+        return 'analysis';
     } catch {
         return false;
     }

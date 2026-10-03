@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
 import { GlobalNav, Ribbon } from './components/GlobalNav';
 import { Toast } from './components/ui';
-import { analyzeDataset } from './lib/analysis';
-import { baseName, buildCsv, buildNotebook, buildReport, downloadFile } from './lib/exporters';
-import { createSampleDataset } from './lib/sampleData';
+import { ANALYSIS_VERSION, startAnalysis } from './engine';
+import { formatDuration } from './lib/analysis';
+import { baseName, buildNotebook, buildReport, downloadBlob, downloadFile } from './lib/exporters';
+import { createSampleFile } from './lib/sampleData';
 import * as storage from './lib/storage';
 import AssistantView from './views/AssistantView';
 import AuthView from './views/AuthView';
@@ -12,6 +13,18 @@ import DatasetsView from './views/DatasetsView';
 import ExplorerView from './views/explorer/ExplorerView';
 
 const TOAST_MS = 4500;
+const PROGRESS_INTERVAL_MS = 120;
+const ACCEPTED = /\.(csv|tsv|txt)$/i;
+
+const isCurrent = (d) => d.analysis?.version === ANALYSIS_VERSION;
+
+/** Datasets saved by earlier versions kept parsed rows; turn them back into a CSV file to re-analyse. */
+const legacyToFile = (d) => {
+    const csv = Papa.unparse(d.data, { columns: d.columns });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    blob.name = d.name;
+    return blob;
+};
 
 export default function DataMind() {
     const [user, setUser] = useState(storage.getSessionUser);
@@ -19,13 +32,15 @@ export default function DataMind() {
     const [loadingDatasets, setLoadingDatasets] = useState(false);
     const [activeId, setActiveId] = useState(null);
     const [view, setView] = useState('datasets');
-    const [explorerTab, setExplorerTab] = useState('univariate');
+    const [explorerTab, setExplorerTab] = useState('overview');
     const [messages, setMessages] = useState([]);
-    const [busy, setBusy] = useState(false);
+    const [job, setJob] = useState(null);
     const [toast, setToast] = useState(null);
+    const progressTimer = useRef(null);
+    const latestProgress = useRef(null);
 
     const activeDataset = datasets.find((d) => d.id === activeId) || null;
-    const analysis = useMemo(() => analyzeDataset(activeDataset), [activeDataset]);
+    const analysis = activeDataset && isCurrent(activeDataset) ? activeDataset.analysis : null;
 
     const notify = useCallback((message, type = 'info') => setToast({ message, type, at: Date.now() }), []);
 
@@ -55,6 +70,8 @@ export default function DataMind() {
         };
     }, [email]);
 
+    useEffect(() => () => clearTimeout(progressTimer.current), []);
+
     /* ---------- Session ---------- */
 
     const startSession = (profile, greeting) => {
@@ -66,6 +83,7 @@ export default function DataMind() {
     };
 
     const signOut = () => {
+        job?.cancel();
         storage.clearSession();
         setUser(null);
         setDatasets([]);
@@ -77,62 +95,88 @@ export default function DataMind() {
     /* ---------- Datasets ---------- */
 
     const openDataset = (dataset) => {
+        if (!isCurrent(dataset)) {
+            reanalyse(dataset);
+            return;
+        }
         if (dataset.id !== activeId) {
             setActiveId(dataset.id);
             setMessages([]);
-            setExplorerTab('univariate');
+            setExplorerTab('overview');
         }
         setView('explorer');
     };
 
-    const addDataset = (dataset) => {
-        setDatasets((current) => [...current, dataset]);
-        openDataset(dataset);
-        notify(`“${dataset.name}” is ready to explore.`, 'success');
-
+    const saveDataset = (dataset) => {
         storage.saveDataset(user.email, dataset).then((saved) => {
-            if (saved) return;
-            // Browser storage is full or disabled. Keep the dataset for this session only.
-            setDatasets((current) => current.map((d) => (d.id === dataset.id ? { ...d, unsaved: true } : d)));
-            notify(`“${dataset.name}” couldn’t be saved in this browser, so it’s available for this session only.`, 'info');
+            const fileStored = saved === 'full';
+            setDatasets((current) => current.map((d) => (d.id === dataset.id ? { ...d, unsaved: !saved, fileStored } : d)));
+            if (!saved) notify(`“${dataset.name}” couldn’t be saved in this browser, so it’s available for this session only.`, 'info');
         });
     };
 
-    const handleFile = (file) => {
-        if (!/\.csv$/i.test(file.name) && file.type !== 'text/csv') {
-            notify('Please choose a .csv file.', 'error');
+    const pushProgress = (progress) => {
+        latestProgress.current = progress;
+        const flush = () => {
+            progressTimer.current = null;
+            const p = latestProgress.current;
+            setJob((j) => (j ? { ...j, progress: p } : j));
+        };
+        if (progress.phase !== 'scanning') {
+            clearTimeout(progressTimer.current);
+            flush();
+        } else if (!progressTimer.current) {
+            progressTimer.current = setTimeout(flush, PROGRESS_INTERVAL_MS);
+        }
+    };
+
+    const runAnalysis = async (file, existing) => {
+        if (job) {
+            notify('Please wait for the current analysis to finish, or cancel it.', 'info');
             return;
         }
-        setBusy(true);
-        const rows = [];
-        Papa.parse(file, {
-            header: true,
-            dynamicTyping: true,
-            skipEmptyLines: true,
-            worker: true,
-            chunkSize: 1024 * 1024,
-            chunk: (results) => {
-                for (const row of results.data) rows.push(row);
-            },
-            complete: () => {
-                setBusy(false);
-                if (!rows.length) {
-                    notify('That file has no data rows.', 'error');
-                    return;
-                }
-                addDataset({
-                    id: Date.now(),
-                    name: file.name,
-                    data: rows,
-                    columns: Object.keys(rows[0]).filter((c) => c !== '__parsed_extra'),
-                    uploadedAt: new Date().toISOString(),
-                });
-            },
-            error: (err) => {
-                setBusy(false);
-                notify(`Couldn’t read the file: ${err.message}`, 'error');
-            },
-        });
+        const handle = startAnalysis(file, { onProgress: pushProgress });
+        setJob({ fileName: file.name, cancel: handle.cancel, progress: { phase: 'reading', bytesDone: 0, bytesTotal: file.size, rows: 0, elapsedMs: 0 } });
+        setView('datasets');
+        try {
+            const result = await handle.promise;
+            const dataset = {
+                id: existing?.id ?? Date.now(),
+                name: file.name,
+                size: file.size,
+                uploadedAt: existing?.uploadedAt ?? new Date().toISOString(),
+                analysis: result,
+                file,
+            };
+            setDatasets((current) => (existing ? current.map((d) => (d.id === dataset.id ? dataset : d)) : [...current, dataset]));
+            setActiveId(dataset.id);
+            setMessages([]);
+            setExplorerTab('overview');
+            setView('explorer');
+            notify(`All ${result.meta.rows.toLocaleString()} rows analysed in ${formatDuration(result.meta.elapsedMs)}.`, 'success');
+            saveDataset(dataset);
+        } catch (err) {
+            if (err.name === 'AnalysisCancelled') notify('Analysis cancelled.');
+            else notify(`Couldn’t analyse “${file.name}”: ${err.message}`, 'error');
+        } finally {
+            clearTimeout(progressTimer.current);
+            progressTimer.current = null;
+            setJob(null);
+        }
+    };
+
+    function reanalyse(dataset) {
+        if (dataset.data) runAnalysis(legacyToFile(dataset), dataset);
+        else if (dataset.file) runAnalysis(dataset.file, dataset);
+        else notify('This dataset was saved by an older version without its file. Please upload it again.', 'info');
+    }
+
+    const handleFile = (file) => {
+        if (!ACCEPTED.test(file.name) && file.type !== 'text/csv') {
+            notify('Please choose a .csv, .tsv or .txt file.', 'error');
+            return;
+        }
+        runAnalysis(file);
     };
 
     const deleteDataset = (dataset) => {
@@ -149,9 +193,15 @@ export default function DataMind() {
 
     const exportAs = (kind) => {
         const name = baseName(activeDataset.name);
-        if (kind === 'csv') downloadFile(`${name}_export.csv`, buildCsv(activeDataset), 'text/csv');
-        if (kind === 'report') downloadFile(`${name}_report.md`, buildReport(activeDataset, analysis), 'text/markdown');
-        if (kind === 'notebook') downloadFile(`${name}_analysis.ipynb`, buildNotebook(activeDataset), 'application/x-ipynb+json');
+        if (kind === 'csv') {
+            if (!activeDataset.file) {
+                notify('The original file isn’t stored in this browser (it was too large). Upload it again to download it.', 'info');
+                return;
+            }
+            downloadBlob(activeDataset.name, activeDataset.file);
+        }
+        if (kind === 'report') downloadFile(`${name}_report.md`, buildReport(analysis), 'text/markdown');
+        if (kind === 'notebook') downloadFile(`${name}_analysis.ipynb`, buildNotebook(analysis), 'application/x-ipynb+json');
         notify('Download started.', 'success');
     };
 
@@ -177,40 +227,36 @@ export default function DataMind() {
         );
     }
 
-    const currentView = analysis ? view : 'datasets';
+    const currentView = analysis && !job ? view : 'datasets';
 
     return (
         <div className="app">
             {toastNode}
-            <GlobalNav view={currentView} onNavigate={setView} hasDataset={!!analysis} user={user} onSignOut={signOut} />
-            <Ribbon>Your data never leaves this device — every chart and statistic is computed right in your browser.</Ribbon>
+            <GlobalNav view={currentView} onNavigate={setView} hasDataset={!!analysis && !job} user={user} onSignOut={signOut} />
+            <Ribbon>Your data never leaves this device — every row is analysed right in your browser, on all your CPU cores.</Ribbon>
 
             <main id="main">
                 {currentView === 'datasets' && (
                     <DatasetsView
                         datasets={datasets}
                         activeId={activeId}
-                        busy={busy}
+                        job={job}
                         loading={loadingDatasets}
                         onFile={handleFile}
                         onOpen={openDataset}
                         onDelete={deleteDataset}
-                        onSample={() => addDataset(createSampleDataset())}
+                        onSample={() => runAnalysis(createSampleFile())}
                     />
                 )}
                 {currentView === 'explorer' && (
                     <ExplorerView dataset={activeDataset} analysis={analysis} tab={explorerTab} onTabChange={setExplorerTab} onExport={exportAs} />
                 )}
-                {currentView === 'assistant' && (
-                    <AssistantView dataset={activeDataset} analysis={analysis} messages={messages} onMessages={setMessages} />
-                )}
+                {currentView === 'assistant' && <AssistantView analysis={analysis} messages={messages} onMessages={setMessages} />}
             </main>
 
             <footer className="footer">
-                <p>
-                    DataMind runs entirely in your browser. Large files are analysed on an even 110,000-row sample; counts and exports always include every row.
-                </p>
-                <p className="footer__fine">Built with React, Recharts and PapaParse.</p>
+                <p>DataMind reads every row of your file in your browser, split across your CPU cores. Counts, means, correlations and group statistics are exact; for very large files, medians and percentiles are estimated to ±0.1%.</p>
+                <p className="footer__fine">Built with React and Recharts.</p>
             </footer>
         </div>
     );

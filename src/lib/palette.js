@@ -9,6 +9,8 @@ export const OTHER_COLOR = '#a1a1a6';
 export const CHART = {
     primary: '#5f7f45', // sage green, single-series bars
     accent: '#2f4422', // deep green, median markers
+    soft: '#e6eedb', // box fill
+    warn: '#d9822b', // outliers and missing values
     grid: '#e8e8ed',
     axis: '#86868b',
     text: '#1d1d1f',
