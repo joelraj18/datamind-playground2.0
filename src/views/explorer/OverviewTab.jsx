@@ -1,7 +1,7 @@
 import React from 'react';
 import { CalendarDays, Hash, Type } from 'lucide-react';
 import { Callout, Card, SectionTitle } from '../../components/ui';
-import { approx, formatBytes, formatDuration, formatNumber, formatPct } from '../../lib/analysis';
+import { approx, formatBytes, formatDate, formatDuration, formatNumber, formatPct } from '../../lib/analysis';
 import { GLOSSARY } from '../../lib/glossary';
 
 const TYPE_ICON = { numeric: Hash, categorical: Type, date: CalendarDays };
@@ -10,9 +10,9 @@ const TYPE_LABEL = { numeric: 'Number', categorical: 'Text', date: 'Date' };
 function summary(stat) {
     if (stat.type === 'numeric') {
         if (stat.empty) return 'No numeric values';
-        return `${formatNumber(stat.min)} – ${formatNumber(stat.max)} · mean ${formatNumber(stat.mean)} · median ${approx(stat.exact)}${formatNumber(stat.median)}`;
+        return `${formatNumber(stat.min)} to ${formatNumber(stat.max)} · mean ${formatNumber(stat.mean)} · median ${approx(stat.exact)}${formatNumber(stat.median)}`;
     }
-    if (stat.type === 'date') return stat.min ? `${stat.min} → ${stat.max}` : 'No readable dates';
+    if (stat.type === 'date') return stat.min ? `${formatDate(stat.min)} to ${formatDate(stat.max)}` : 'No readable dates';
     return `Most common: ${stat.mode} (${formatPct(stat.modePct)})`;
 }
 
@@ -23,7 +23,7 @@ export default function OverviewTab({ analysis }) {
     return (
         <div className="stack-xl">
             <section>
-                <SectionTitle strong="Overview." soft="What’s in this file." />
+                <SectionTitle strong="Overview" soft="What’s in this file" />
                 <div className="facts-grid">
                     <div>
                         <p className="eyebrow">File</p>
@@ -44,7 +44,7 @@ export default function OverviewTab({ analysis }) {
                     <div>
                         <p className="eyebrow">Accuracy</p>
                         <p className="facts-grid__value">{meta.exactStats ? 'Exact statistics' : 'Exact, quantiles ±0.1%'}</p>
-                        <p className="text-muted">{meta.exactStats ? 'Matches pandas to floating-point precision' : `${meta.approxColumns.length} column(s) use the quantile sketch`}</p>
+                        <p className="text-muted">{meta.exactStats ? 'Matches pandas to full floating point precision' : `${meta.approxColumns.length} column(s) use the quantile sketch`}</p>
                     </div>
                 </div>
                 {meta.malformedRows > 0 && (
@@ -55,7 +55,7 @@ export default function OverviewTab({ analysis }) {
             </section>
 
             <section>
-                <SectionTitle strong="Columns." soft={`${columns.length} in total.`} />
+                <SectionTitle strong="Columns" soft={`${columns.length} in total`} />
                 <Card>
                     <div className="table-wrap">
                         <table className="table">
@@ -77,7 +77,7 @@ export default function OverviewTab({ analysis }) {
                                     const s = stats[col];
                                     const Icon = TYPE_ICON[kinds[i]];
                                     const filled = rows ? 100 - ((s.missing || 0) / rows) * 100 - (s.invalidPct || 0) : 0;
-                                    const distinct = s.type === 'categorical' ? `${s.uniqueExact ? '' : '≈ '}${formatNumber(s.unique)}` : s.type === 'numeric' && s.unique != null ? formatNumber(s.unique) : s.type === 'numeric' ? '1,024+' : '—';
+                                    const distinct = s.type === 'categorical' ? `${s.uniqueExact ? '' : '≈ '}${formatNumber(s.unique)}` : s.type === 'numeric' && s.unique != null ? formatNumber(s.unique) : s.type === 'numeric' ? 'over 1,024' : 'n/a';
                                     return (
                                         <tr key={col}>
                                             <th scope="row">{col}</th>
@@ -102,7 +102,7 @@ export default function OverviewTab({ analysis }) {
 
             {preview.length > 0 && (
                 <section>
-                    <SectionTitle strong="Preview." soft={`First ${preview.length} rows.`} info={GLOSSARY.preview} />
+                    <SectionTitle strong="Preview" soft={`First ${preview.length} rows`} info={GLOSSARY.preview} />
                     <Card>
                         <div className="table-wrap">
                             <table className="table table--compact">
@@ -126,7 +126,7 @@ export default function OverviewTab({ analysis }) {
                                             {row.map((v, i) => (
                                                 // eslint-disable-next-line react/no-array-index-key
                                                 <td key={i} className={kinds[i] === 'numeric' ? 'is-num' : ''}>
-                                                    {v === '' ? <span className="text-muted">—</span> : v}
+                                                    {v === '' ? <span className="text-muted">empty</span> : v}
                                                 </td>
                                             ))}
                                         </tr>

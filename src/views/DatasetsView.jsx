@@ -17,15 +17,15 @@ import {
 } from 'lucide-react';
 import AnalysisProgress from '../components/AnalysisProgress';
 import { Carousel, EmptyState, InfoTip, SectionTitle } from '../components/ui';
-import { formatBytes, formatCompact, formatDuration } from '../lib/analysis';
+import { displayName, formatBytes, formatCompact, formatDuration } from '../lib/analysis';
 import { GLOSSARY } from '../lib/glossary';
 
 const EXPERIENCE = [
-    { icon: Cpu, title: 'Every row, every core', text: 'Files of any size — millions or billions of rows — are streamed across all your CPU cores. Nothing is sampled away.' },
+    { icon: Cpu, title: 'Every row, every core', text: 'Files of any size, even millions or billions of rows, are streamed across all your CPU cores. Nothing is sampled away.' },
     { icon: BarChart3, title: 'Four views per column', text: 'Histogram with adjustable bins, box plot, cumulative distribution and Q-Q plot, plus a percentile table.' },
     { icon: Grid3x3, title: 'Correlation matrix', text: 'Pearson’s r between every pair of numeric columns, computed over all rows, with the strongest pairs called out.' },
     { icon: Layers, title: 'Group comparisons', text: 'Means, medians and box plots per category, and scatter plots with a trend line fitted on every row.' },
-    { icon: CalendarDays, title: 'Timelines', text: 'Date columns become records-over-time charts by day, week, month or year.' },
+    { icon: CalendarDays, title: 'Timelines', text: 'Date columns become charts of records over time, by day, week, month or year.' },
     { icon: Download, title: 'Clean chart exports', text: 'Download any chart as a PNG or SVG image without tooltips or UI, or the exact numbers behind it as CSV.' },
     { icon: Brain, title: 'Insights engine', text: 'Skew, outliers, invalid values, dominant categories and missing data flagged automatically, in plain English.' },
     { icon: Target, title: 'Predictive blueprint', text: 'Ranks the features most likely to predict your target, and the segments with outsized value.' },
@@ -68,7 +68,7 @@ function DatasetCard({ dataset, active, busy, onOpen, onDelete }) {
         <article className={`product-card ${active ? 'is-active' : ''}`}>
             <p className="eyebrow">{active ? 'Currently open' : `Added ${uploaded}`}</p>
             <h3 className="product-card__title" title={dataset.name}>
-                {dataset.name.replace(/\.(csv|tsv|txt)$/i, '')}
+                {displayName(dataset.name)}
             </h3>
             <div className="product-card__visual" aria-hidden="true">
                 <span className="product-card__big">{formatCompact(rows)}</span>
@@ -80,7 +80,7 @@ function DatasetCard({ dataset, active, busy, onOpen, onDelete }) {
                     <strong>{rows.toLocaleString()}</strong> records · <strong>{columns}</strong> columns
                     <br />
                     {outdated
-                        ? 'Saved by an earlier version — opening re-analyses it'
+                        ? 'Saved by an earlier version, so opening it runs a fresh analysis'
                         : `${formatBytes(dataset.size || meta.fileSize)} · analysed in ${formatDuration(meta.elapsedMs)}`}
                     {dataset.unsaved && ' · this session only'}
                 </p>
@@ -122,7 +122,7 @@ function UploadZone({ onFile, busy }) {
             <div className="upload__text">
                 <p className="upload__title">Drop a CSV here to begin.</p>
                 <p className="upload__hint">
-                    Any size — every row is analysed, streamed across all your CPU cores. The first row should hold column names; comma, semicolon, tab and pipe delimiters are detected automatically.
+                    Any size. Every row is analysed, streamed across all your CPU cores. The first row should hold column names; comma, semicolon, tab and pipe delimiters are detected automatically.
                 </p>
             </div>
             <button type="button" className="btn btn--primary btn--lg" disabled={busy} onClick={() => input.current?.click()}>
@@ -164,11 +164,11 @@ export default function DatasetsView({ datasets, activeId, job, loading, onFile,
             {job ? <AnalysisProgress fileName={job.fileName} progress={job.progress} onCancel={job.cancel} /> : <UploadZone onFile={onFile} busy={busy} />}
 
             <section className="shelf">
-                <SectionTitle strong="Your datasets." soft={datasets.length ? 'Pick one to explore.' : loading ? 'Loading…' : 'Nothing here yet.'} />
+                <SectionTitle strong="Your datasets" soft={datasets.length ? 'Pick one to explore' : loading ? 'Loading…' : 'Nothing here yet'} />
                 {loading && datasets.length === 0 ? (
                     <EmptyState icon={Loader2} title="Loading your saved datasets…" />
                 ) : datasets.length === 0 ? (
-                    <EmptyState icon={FileSpreadsheet} title="Upload a CSV, or start with sample data.">
+                    <EmptyState icon={FileSpreadsheet} title="Upload a CSV, or start with sample data">
                         <button type="button" className="btn btn--secondary" onClick={onSample} disabled={busy}>
                             Load sample phone sales
                         </button>
@@ -183,7 +183,7 @@ export default function DatasetsView({ datasets, activeId, job, loading, onFile,
             </section>
 
             <section className="shelf">
-                <SectionTitle strong="The DataMind experience." soft="Everything you get from a single upload." />
+                <SectionTitle strong="The DataMind experience" soft="Everything you get from a single upload" />
                 <Carousel label="Features">
                     {EXPERIENCE.map(({ icon: Icon, title, text }) => (
                         <article key={title} className="feature-card">

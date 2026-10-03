@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Cpu, Loader2, X } from 'lucide-react';
-import { formatBytes, formatCompact, formatDuration } from '../lib/analysis';
+import { displayName, formatBytes, formatCompact, formatDuration } from '../lib/analysis';
 import { GLOSSARY } from '../lib/glossary';
 import { InfoTip } from './ui';
 
 const PHASES = {
-    reading: 'Reading the header and sampling the file…',
+    reading: 'Reading the header and sampling the file',
     scanning: 'Streaming every row',
-    finalising: 'Finalising statistics and charts…',
+    finalising: 'Finalising statistics and charts',
 };
 
 /**
@@ -81,7 +81,7 @@ export default function AnalysisProgress({ fileName, progress, onCancel }) {
                         <Loader2 className="spin" aria-hidden="true" /> {finalising ? 'Almost done' : 'Analysing every row'}
                     </p>
                     <h2 className="progress-card__title" title={fileName}>
-                        {fileName}
+                        {displayName(fileName)}
                     </h2>
                     <p className="progress-card__sub">
                         {formatBytes(progress.bytesTotal)}
@@ -127,11 +127,11 @@ export default function AnalysisProgress({ fileName, progress, onCancel }) {
                 </div>
                 <div>
                     <dt>Speed</dt>
-                    <dd>{rowRate ? `${formatCompact(rowRate)} rows/s` : '—'}</dd>
+                    <dd>{rowRate ? `${formatCompact(rowRate)} rows/s` : 'measuring'}</dd>
                 </div>
                 <div>
                     <dt>Throughput</dt>
-                    <dd>{byteRate ? `${formatBytes(byteRate)}/s` : '—'}</dd>
+                    <dd>{byteRate ? `${formatBytes(byteRate)}/s` : 'measuring'}</dd>
                 </div>
                 <div>
                     <dt>Data read</dt>

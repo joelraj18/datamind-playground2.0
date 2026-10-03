@@ -7,7 +7,7 @@ const EMPTY_FORM = { name: '', email: '', password: '' };
 const FEATURES = [
     { icon: Zap, title: 'Instant analysis', text: 'Statistics, distributions and correlations the moment a CSV lands.' },
     { icon: ShieldCheck, title: 'Private by design', text: 'Everything runs in your browser. No file ever leaves your device.' },
-    { icon: Sparkles, title: 'Ready-made insights', text: 'Anomalies, segments and predictive signals, explained in plain language.' },
+    { icon: Sparkles, title: 'Insights in plain language', text: 'Anomalies, segments and predictive signals, explained clearly.' },
 ];
 
 export default function AuthView({ onSignIn, onRegister }) {
@@ -45,9 +45,9 @@ export default function AuthView({ onSignIn, onRegister }) {
             <section className="auth__intro">
                 <Leaf className="auth__logo" aria-hidden="true" />
                 <h1 className="display">
-                    DataMind.
+                    DataMind
                     <br />
-                    <span className="display__soft">Data, explained.</span>
+                    <span className="display__soft">Data, explained</span>
                 </h1>
                 <p className="lead">Drop in a CSV and get a complete exploratory analysis in seconds. No setup, no server, no code.</p>
                 <ul className="feature-list">
@@ -122,7 +122,7 @@ export default function AuthView({ onSignIn, onRegister }) {
 
                 <Callout tone="info" title="Local demo account">
                     Accounts and datasets are stored only in this browser’s local storage. This keeps your workspaces separate on a shared
-                    computer, but it is not a secure login — don’t reuse an important password.
+                    computer, but it is not a secure login, so don’t reuse an important password.
                 </Callout>
             </section>
         </div>

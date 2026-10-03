@@ -11,10 +11,16 @@ const iso = (day) => {
     return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 };
 
+/** "1 Jan 2024" for chart labels; `start` keeps the ISO date for CSV exports. */
+const pretty = (day) => {
+    const { y, m, d } = civilFromDays(day);
+    return `${d} ${MONTHS[m - 1]} ${y}`;
+};
+
 const GRANULARITIES = {
-    day: { key: (d) => d, next: (k) => k + 1, start: (k) => k, label: (k) => iso(k), title: (k) => iso(k) },
+    day: { key: (d) => d, next: (k) => k + 1, start: (k) => k, label: (k) => pretty(k), title: (k) => pretty(k) },
     // Weeks start on Monday (day 0, 1970-01-01, was a Thursday).
-    week: { key: (d) => d - ((d + 3) % 7), next: (k) => k + 7, start: (k) => k, label: (k) => iso(k), title: (k) => `Week of ${iso(k)}` },
+    week: { key: (d) => d - ((d + 3) % 7), next: (k) => k + 7, start: (k) => k, label: (k) => pretty(k), title: (k) => `Week of ${pretty(k)}` },
     month: {
         key: (d) => {
             const { y, m } = civilFromDays(d);

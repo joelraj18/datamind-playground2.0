@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Lightbulb } from 'lucide-react';
 import { InfoTip, RichText } from '../components/ui';
-import { STRONG_CORRELATION } from '../lib/analysis';
+import { STRONG_CORRELATION, displayName } from '../lib/analysis';
 import { SUGGESTED_QUESTIONS, answer } from '../lib/assistant';
 import { guessTarget } from '../lib/blueprints';
 
 const REPLY_DELAY_MS = 350;
 
 export default function AssistantView({ analysis, messages, onMessages }) {
-    const name = analysis.meta.fileName;
+    const name = displayName(analysis.meta.fileName);
     const [input, setInput] = useState('');
     const [typing, setTyping] = useState(false);
     const endRef = useRef(null);
@@ -72,7 +72,7 @@ export default function AssistantView({ analysis, messages, onMessages }) {
                     <div className="bubble bubble--bot">
                         <p>
                             Hi! Ask me anything about <strong>{name}</strong>. I answer from the analysis computed on your device.
-                            <InfoTip text="Answers come from built-in rules over the computed statistics — no data is sent to an AI service." />
+                            <InfoTip text="Answers come from rules applied to the computed statistics. No data is sent to an AI service." />
                         </p>
                     </div>
                     {messages.map((m, i) => (

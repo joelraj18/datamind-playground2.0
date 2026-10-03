@@ -28,7 +28,7 @@ function useLazyVisible(margin = '400px') {
 export function AccuracyBadge({ exact }) {
     return (
         <span className={`badge ${exact ? 'badge--exact' : 'badge--approx'}`}>
-            {exact ? 'Exact' : '≈ ±0.1%'}
+            {exact ? 'Exact' : '≈ within 0.1%'}
             <InfoTip text={GLOSSARY.exactness} label="About accuracy" />
         </span>
     );

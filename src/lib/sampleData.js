@@ -18,7 +18,7 @@ const COLORS = ['Green', 'Blue', 'Pink', 'White', 'Black'];
 const REGIONS = ['North', 'South', 'East', 'West'];
 const CHANNELS = ['Online', 'Store', 'Carrier'];
 
-export const SAMPLE_NAME = 'sample_phone_sales.csv';
+export const SAMPLE_NAME = 'Phone sales sample.csv';
 
 export function createSampleCsv(rows = 20000) {
     const rand = mulberry32(42);

@@ -108,8 +108,8 @@ export function histogramFromEdges(dist, edges, integer) {
         const a = edges[i];
         const b = edges[i + 1];
         let label;
-        if (integer) label = b - 1 > a ? `${formatEdge(a)}–${formatEdge(i === last ? b : b - 1)}` : formatEdge(a);
-        else label = `${formatEdge(a)}–${formatEdge(b)}`;
+        if (integer) label = b - 1 > a ? `${formatEdge(a)} to ${formatEdge(i === last ? b : b - 1)}` : formatEdge(a);
+        else label = `${formatEdge(a)} to ${formatEdge(b)}`;
         bins.push({ start: a, end: b, count: upto - before, label, closed: i === last });
         before = upto;
     }
@@ -448,7 +448,7 @@ function timeline(merged, plan, t) {
 
 /* ---------- Insights ---------- */
 
-const fmt = (v) => (Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—');
+const fmt = (v) => (Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : 'n/a');
 
 function buildInsights(analysis) {
     const { stats, numericCols, categoricalCols, dateCols, correlations: corrs, meta, idCols } = analysis;
@@ -459,10 +459,10 @@ function buildInsights(analysis) {
         const s = stats[col];
         if (idCols.includes(col)) continue;
         if (Math.abs(s.skewness) > 1) {
-            add('Analyst', 'warning', `**${col}** is strongly ${s.skewness > 0 ? 'right' : 'left'}-skewed (skewness ${s.skewness.toFixed(2)}): the mean ${fmt(s.mean)} is pulled ${s.skewness > 0 ? 'above' : 'below'} the median ${fmt(s.median)}.`);
+            add('Analyst', 'warning', `**${col}** is strongly skewed to the ${s.skewness > 0 ? 'right' : 'left'} (skewness ${s.skewness.toFixed(2)}): the mean ${fmt(s.mean)} is pulled ${s.skewness > 0 ? 'above' : 'below'} the median ${fmt(s.median)}.`);
         }
         if (s.outlierPct > 1) {
-            add('Analyst', 'warning', `**${col}** has ${fmt(s.outliers)} outliers (${s.outlierPct.toFixed(1)}%) beyond 1.5 × IQR — up to ${fmt(s.max)}. Check whether they are errors or a **premium segment**.`);
+            add('Analyst', 'warning', `**${col}** has ${fmt(s.outliers)} outliers (${s.outlierPct.toFixed(1)}%) beyond 1.5 × IQR, reaching up to ${fmt(s.max)}. Check whether they are errors or a **premium segment**.`);
         }
         if (s.invalid > 0) {
             const examples = analysis.numericDetails[col].invalidExamples;
@@ -491,7 +491,22 @@ function buildInsights(analysis) {
 
 /* ---------- Entry point ---------- */
 
-export function finalize(merged, plan, meta) {
+/**
+ * Column names for display: underscores and hyphens become spaces ("created_at" → "created at").
+ * Names stay unique; the originals are kept in `meta.sourceColumns` for generated code.
+ */
+export function displayColumnNames(names) {
+    const used = new Set();
+    return names.map((raw) => {
+        let name = raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim() || raw;
+        for (let k = 2; used.has(name); k++) name = `${raw.replace(/[_-]+/g, ' ').trim() || raw} (${k})`;
+        used.add(name);
+        return name;
+    });
+}
+
+export function finalize(merged, sourcePlan, meta) {
+    const plan = { ...sourcePlan, columns: displayColumnNames(sourcePlan.columns) };
     const { columns } = plan;
     const rows = merged.rows;
     const stats = {};
@@ -526,7 +541,7 @@ export function finalize(merged, plan, meta) {
             count: present,
             unique: pruned ? Math.max(hllEstimate(hll), counts.size) : counts.size,
             uniqueExact: !pruned,
-            mode: sorted[0]?.[0] ?? '—',
+            mode: sorted[0]?.[0] ?? 'n/a',
             modePct: present && sorted[0] ? (sorted[0][1] / present) * 100 : 0,
             missing,
             missingPct: rows ? (missing / rows) * 100 : 0,
@@ -570,6 +585,7 @@ export function finalize(merged, plan, meta) {
             rows,
             columns: columns.length,
             delimiter: String.fromCharCode(plan.delimiter),
+            sourceColumns: sourcePlan.columns,
             malformedRows: merged.malformed,
             exactStats: approxColumns.length === 0,
             approxColumns,

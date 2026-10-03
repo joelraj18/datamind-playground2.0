@@ -3,8 +3,8 @@ import Papa from 'papaparse';
 import { GlobalNav, Ribbon } from './components/GlobalNav';
 import { Toast } from './components/ui';
 import { ANALYSIS_VERSION, startAnalysis } from './engine';
-import { formatDuration } from './lib/analysis';
-import { baseName, buildNotebook, buildReport, downloadBlob, downloadFile } from './lib/exporters';
+import { displayName, formatDuration } from './lib/analysis';
+import { buildNotebook, buildReport, downloadBlob, downloadFile } from './lib/exporters';
 import { createSampleFile } from './lib/sampleData';
 import * as storage from './lib/storage';
 import AssistantView from './views/AssistantView';
@@ -111,7 +111,7 @@ export default function DataMind() {
         storage.saveDataset(user.email, dataset).then((saved) => {
             const fileStored = saved === 'full';
             setDatasets((current) => current.map((d) => (d.id === dataset.id ? { ...d, unsaved: !saved, fileStored } : d)));
-            if (!saved) notify(`“${dataset.name}” couldn’t be saved in this browser, so it’s available for this session only.`, 'info');
+            if (!saved) notify(`“${displayName(dataset.name)}” couldn’t be saved in this browser, so it’s available for this session only.`, 'info');
         });
     };
 
@@ -157,7 +157,7 @@ export default function DataMind() {
             saveDataset(dataset);
         } catch (err) {
             if (err.name === 'AnalysisCancelled') notify('Analysis cancelled.');
-            else notify(`Couldn’t analyse “${file.name}”: ${err.message}`, 'error');
+            else notify(`Couldn’t analyse “${displayName(file.name)}”: ${err.message}`, 'error');
         } finally {
             clearTimeout(progressTimer.current);
             progressTimer.current = null;
@@ -180,7 +180,7 @@ export default function DataMind() {
     };
 
     const deleteDataset = (dataset) => {
-        if (!window.confirm(`Delete “${dataset.name}”? This can’t be undone.`)) return;
+        if (!window.confirm(`Delete “${displayName(dataset.name)}”? This can’t be undone.`)) return;
         storage.deleteDataset(user.email, dataset.id);
         setDatasets((current) => current.filter((d) => d.id !== dataset.id));
         if (dataset.id === activeId) {
@@ -192,7 +192,7 @@ export default function DataMind() {
     };
 
     const exportAs = (kind) => {
-        const name = baseName(activeDataset.name);
+        const name = displayName(activeDataset.name);
         if (kind === 'csv') {
             if (!activeDataset.file) {
                 notify('The original file isn’t stored in this browser (it was too large). Upload it again to download it.', 'info');
@@ -200,8 +200,8 @@ export default function DataMind() {
             }
             downloadBlob(activeDataset.name, activeDataset.file);
         }
-        if (kind === 'report') downloadFile(`${name}_report.md`, buildReport(analysis), 'text/markdown');
-        if (kind === 'notebook') downloadFile(`${name}_analysis.ipynb`, buildNotebook(analysis), 'application/x-ipynb+json');
+        if (kind === 'report') downloadFile(`${name} report.md`, buildReport(analysis), 'text/markdown');
+        if (kind === 'notebook') downloadFile(`${name} analysis.ipynb`, buildNotebook(analysis), 'application/x-ipynb+json');
         notify('Download started.', 'success');
     };
 
@@ -233,7 +233,7 @@ export default function DataMind() {
         <div className="app">
             {toastNode}
             <GlobalNav view={currentView} onNavigate={setView} hasDataset={!!analysis && !job} user={user} onSignOut={signOut} />
-            <Ribbon>Your data never leaves this device — every row is analysed right in your browser, on all your CPU cores.</Ribbon>
+            <Ribbon>Your data never leaves this device. Every row is analysed right in your browser, on all your CPU cores.</Ribbon>
 
             <main id="main">
                 {currentView === 'datasets' && (

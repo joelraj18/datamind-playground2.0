@@ -3,14 +3,29 @@ import { ChartCard, Segmented, SelectPill } from '../../components/ChartCard';
 import { CategoryBarsChart, CategoryDonut, EcdfChart, HistogramChart, QQChart, TimelineChart, ValueBarsChart, donutSlices } from '../../components/charts';
 import { BoxPlotChart } from '../../components/svgCharts';
 import { Callout, Card, DataTable, EmptyState, SectionTitle } from '../../components/ui';
-import { approx, formatNumber, formatPct } from '../../lib/analysis';
+import { approx, formatDate, formatNumber, formatPct } from '../../lib/analysis';
 import { measureCols } from '../../lib/blueprints';
 import { GLOSSARY } from '../../lib/glossary';
 import { CHART } from '../../lib/palette';
 import { GRANULARITY_OPTIONS, aggregateTimeline } from '../../lib/timeline';
 
 const cvTone = (cv) => (cv == null ? '' : cv > 75 ? 'text-warn' : cv > 50 ? 'text-caution' : '');
-const accuracyNote = (exact) => (exact ? 'exact' : 'quantiles ≈ ±0.1%');
+const accuracyNote = (exact) => (exact ? 'exact' : 'quantiles within 0.1%');
+const VIEW_NAMES = { histogram: 'histogram', box: 'box plot', ecdf: 'cumulative distribution', qq: 'Q-Q plot' };
+const BOX_LABELS = {
+    min: 'Minimum',
+    q1: 'Q1',
+    median: 'Median',
+    q3: 'Q3',
+    max: 'Maximum',
+    iqr: 'IQR',
+    lowerFence: 'Lower fence',
+    upperFence: 'Upper fence',
+    whiskerLow: 'Lower whisker',
+    whiskerHigh: 'Upper whisker',
+    outliersLow: 'Low outliers',
+    outliersHigh: 'High outliers',
+};
 
 /* ---------- Numeric ---------- */
 
@@ -35,32 +50,32 @@ function NumericCard({ column, stat, detail, rows }) {
 
     const subtitle = `${stat.count.toLocaleString()} values of ${rows.toLocaleString()} rows · ${accuracyNote(stat.exact)}`;
     const getExport = () => {
-        const base = { filename: `${column}_${view}`, subtitle };
+        const base = { filename: `${column} ${VIEW_NAMES[view]}`, subtitle };
         if (view === 'histogram') {
             if (bins === 'values') {
-                return { ...base, title: `${column} — count per value`, rows: detail.valueCounts.map((v) => ({ value: v.value, records: v.count, share_pct: (v.count / stat.count) * 100 })) };
+                return { ...base, title: `${column}: count per value`, rows: detail.valueCounts.map((v) => ({ Value: v.value, Records: v.count, 'Share (%)': (v.count / stat.count) * 100 })) };
             }
             return {
                 ...base,
-                title: `${column} — histogram`,
-                rows: detail.histograms[bins].map((b) => ({ bin_start: b.start, bin_end: b.end, includes_end: !!b.closed, records: b.count, share_pct: (b.count / stat.count) * 100 })),
+                title: `${column}: histogram`,
+                rows: detail.histograms[bins].map((b) => ({ 'Bin start': b.start, 'Bin end': b.end, 'Includes end': !!b.closed, Records: b.count, 'Share (%)': (b.count / stat.count) * 100 })),
             };
         }
         if (view === 'box') {
             const { box } = detail;
             return {
                 ...base,
-                title: `${column} — box plot`,
+                title: `${column}: box plot`,
                 legend: [
-                    { label: 'Interquartile range (Q1–Q3)', color: CHART.soft },
+                    { label: 'Interquartile range (Q1 to Q3)', color: CHART.soft },
                     { label: 'Median', color: CHART.accent },
                     { label: 'Outlier extremes', color: CHART.warn, shape: 'dot' },
                 ],
-                rows: Object.entries(box).map(([statistic, value]) => ({ statistic, value })),
+                rows: Object.entries(box).map(([statistic, value]) => ({ Statistic: BOX_LABELS[statistic] || statistic, Value: value })),
             };
         }
-        if (view === 'ecdf') return { ...base, title: `${column} — cumulative distribution`, rows: detail.ecdf.map((p) => ({ percentile: p.p, value: p.x })) };
-        return { ...base, title: `${column} — normal Q-Q plot`, rows: detail.qq.map((p) => ({ expected_if_normal: p.theoretical, actual: p.sample })) };
+        if (view === 'ecdf') return { ...base, title: `${column}: cumulative distribution`, rows: detail.ecdf.map((p) => ({ Percentile: p.p, Value: p.x })) };
+        return { ...base, title: `${column}: normal Q-Q plot`, rows: detail.qq.map((p) => ({ 'Expected if normal': p.theoretical, Actual: p.sample })) };
     };
 
     return (
@@ -120,12 +135,12 @@ function CategoryCard({ column, stat, dist }) {
     const [view, setView] = useState('bars');
     const getExport = () => {
         const subtitle = `${stat.count.toLocaleString()} values · ${stat.uniqueExact ? '' : '≈ '}${formatNumber(stat.unique)} categories${stat.countsExact ? '' : ' · counts for rare categories are lower bounds'}`;
-        const rows = dist.map((d) => ({ category: d.name, records: d.value, share_pct: d.percentage }));
+        const rows = dist.map((d) => ({ Category: d.name, Records: d.value, 'Share (%)': d.percentage }));
         if (view === 'donut') {
             const slices = donutSlices(dist, stat.otherCount);
-            return { filename: `${column}_donut`, title: `${column} — share of records`, subtitle, rows, legend: slices.map((s) => ({ label: s.name, value: `${s.percentage.toFixed(1)}%`, color: s.fill, shape: 'dot' })) };
+            return { filename: `${column} donut`, title: `${column}: share of records`, subtitle, rows, legend: slices.map((s) => ({ label: s.name, value: `${s.percentage.toFixed(1)}%`, color: s.fill, shape: 'dot' })) };
         }
-        return { filename: `${column}_bars`, title: `${column} — records per category`, subtitle, rows };
+        return { filename: `${column} bars`, title: `${column}: records per category`, subtitle, rows };
     };
     return (
         <ChartCard
@@ -166,14 +181,14 @@ function TimelineCard({ column, stat, timeline, measures }) {
 
     return (
         <ChartCard
-            eyebrow={`${stat.min} → ${stat.max}`}
+            eyebrow={`${formatDate(stat.min)} to ${formatDate(stat.max)}`}
             title={column}
             info={GLOSSARY.timeline}
             getExport={() => ({
-                filename: `${column}_timeline_${used}`,
-                title: `${measureLabel} per ${used} — ${column}`,
+                filename: `${column} timeline by ${used}`,
+                title: `${measureLabel} per ${used}: ${column}`,
                 subtitle: `${stat.count.toLocaleString()} dated records · ${formatNumber(stat.spanDays)} days`,
-                rows: points.map((p) => ({ period_start: p.start, period: p.title, [measure ? `average_${measure}` : 'records']: p.value, records: p.n })),
+                rows: points.map((p) => ({ 'Period start': p.start, Period: p.title, [measure ? `Average ${measure}` : 'Records']: p.value, ...(measure ? { Records: p.n } : {}) })),
             })}
             controls={
                 <>
@@ -208,7 +223,7 @@ export default function UnivariateTab({ analysis }) {
         { key: 'median', label: 'Median', numeric: true, info: GLOSSARY.median, render: (r) => `${approx(r.exact)}${formatNumber(r.median)}` },
         { key: 'std', label: 'Std dev', numeric: true, info: GLOSSARY.std, render: (r) => formatNumber(r.std) },
         { key: 'skewness', label: 'Skew', numeric: true, info: GLOSSARY.skewness, render: (r) => <span className={Math.abs(r.skewness) > 1 ? 'text-caution' : ''}>{formatNumber(r.skewness)}</span> },
-        { key: 'cv', label: 'CV', numeric: true, info: GLOSSARY.cv, render: (r) => <span className={cvTone(r.cv)}>{r.cv == null ? '—' : formatPct(r.cv)}</span> },
+        { key: 'cv', label: 'CV', numeric: true, info: GLOSSARY.cv, render: (r) => <span className={cvTone(r.cv)}>{r.cv == null ? 'n/a' : formatPct(r.cv)}</span> },
         { key: 'min', label: 'Min', numeric: true, info: GLOSSARY.min, render: (r) => formatNumber(r.min) },
         { key: 'max', label: 'Max', numeric: true, info: GLOSSARY.max, render: (r) => formatNumber(r.max) },
         { key: 'outlierPct', label: 'Outliers', numeric: true, info: GLOSSARY.outliers, render: (r) => <span className={r.outlierPct > 1 ? 'text-warn' : 'text-muted'}>{formatPct(r.outlierPct)}</span> },
@@ -220,9 +235,9 @@ export default function UnivariateTab({ analysis }) {
     return (
         <div className="stack-xl">
             <section>
-                <SectionTitle strong="Numbers." soft="Centre, spread and shape of every numeric column." />
+                <SectionTitle strong="Numbers" soft="Centre, spread and shape of every numeric column" />
                 {measures.length === 0 ? (
-                    <EmptyState title="No numeric columns found." />
+                    <EmptyState title="No numeric columns found" />
                 ) : (
                     <>
                         <Card>
@@ -250,7 +265,7 @@ export default function UnivariateTab({ analysis }) {
 
             {catCols.length > 0 && (
                 <section>
-                    <SectionTitle strong="Categories." soft="How records split across each label." />
+                    <SectionTitle strong="Categories" soft="How records split across each label" />
                     <div className="grid grid--2">
                         {catCols.map((col) => (
                             <CategoryCard key={col} column={col} stat={stats[col]} dist={categoricalDists[col]} />
@@ -261,7 +276,7 @@ export default function UnivariateTab({ analysis }) {
 
             {dateCols.length > 0 && (
                 <section>
-                    <SectionTitle strong="Dates." soft="When your records happened." info={GLOSSARY.dates} />
+                    <SectionTitle strong="Dates" soft="When your records happened" info={GLOSSARY.dates} />
                     <div className="grid">
                         {dateCols
                             .filter((c) => timelines[c]?.days.length)
