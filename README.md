@@ -9,6 +9,9 @@ Upload CSV → Instantly generate statistical insights, visualizations, and pred
 ## Live Demo
 https://joelraj18.github.io/datamind-playground2.0/
 
+## Interview Guide
+How to present this project, with real numbers and a demo script: [docs/guide.md](docs/guide.md)
+
 ## Screenshots
 
 ### Univariate Analysis
