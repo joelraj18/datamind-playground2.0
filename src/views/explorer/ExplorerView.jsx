@@ -1,22 +1,17 @@
 import React from 'react';
-import { Download, FileText, NotebookPen } from 'lucide-react';
-import { Callout, StatTile } from '../../components/ui';
-import { STRONG_CORRELATION, formatPct } from '../../lib/analysis';
+import { CheckCircle2, Download, FileText, NotebookPen } from 'lucide-react';
+import { AccuracyBadge } from '../../components/ChartCard';
+import { StatTile } from '../../components/ui';
+import { STRONG_CORRELATION, formatBytes, formatDuration, formatPct } from '../../lib/analysis';
 import { qualitySummary } from '../../lib/blueprints';
 import { GLOSSARY } from '../../lib/glossary';
-import {
-    BivariateTab,
-    CorrelationTab,
-    DecisionTab,
-    InsightsTab,
-    PredictiveTab,
-    QualityTab,
-    SegmentationTab,
-    TemplateTab,
-    UnivariateTab,
-} from './tabs';
+import OverviewTab from './OverviewTab';
+import { BivariateTab, CorrelationTab } from './RelationshipTabs';
+import UnivariateTab from './UnivariateTab';
+import { DecisionTab, InsightsTab, PredictiveTab, QualityTab, SegmentationTab, TemplateTab } from './tabs';
 
 export const EXPLORER_TABS = [
+    { id: 'overview', label: 'Overview', Component: OverviewTab },
     { id: 'univariate', label: 'Univariate', Component: UnivariateTab },
     { id: 'correlation', label: 'Correlation', Component: CorrelationTab },
     { id: 'bivariate', label: 'Bivariate', Component: BivariateTab },
@@ -32,6 +27,7 @@ export default function ExplorerView({ dataset, analysis, tab, onTabChange, onEx
     const active = EXPLORER_TABS.find((t) => t.id === tab) || EXPLORER_TABS[0];
     const { Component } = active;
     const { completeness } = qualitySummary(analysis);
+    const { meta } = analysis;
     const strong = analysis.correlations.filter((c) => Math.abs(c.correlation) > STRONG_CORRELATION).length;
 
     return (
@@ -40,33 +36,36 @@ export default function ExplorerView({ dataset, analysis, tab, onTabChange, onEx
                 <div>
                     <p className="eyebrow">Explore</p>
                     <h1 className="display display--md" title={dataset.name}>
-                        {dataset.name.replace(/\.csv$/i, '')}
+                        {dataset.name.replace(/\.(csv|tsv|txt)$/i, '')}
                     </h1>
                 </div>
                 <div className="page-hero__links">
                     <button type="button" className="link" onClick={() => onExport('report')}>
                         <FileText aria-hidden="true" /> Report (.md)
                     </button>
-                    <button type="button" className="link" onClick={() => onExport('csv')}>
-                        <Download aria-hidden="true" /> Data (.csv)
-                    </button>
                     <button type="button" className="link" onClick={() => onExport('notebook')}>
                         <NotebookPen aria-hidden="true" /> Notebook (.ipynb)
+                    </button>
+                    <button type="button" className="link" onClick={() => onExport('csv')} disabled={!dataset.file} title={dataset.file ? undefined : 'The original file was too large to keep in this browser'}>
+                        <Download aria-hidden="true" /> Original file ({formatBytes(meta.fileSize)})
                     </button>
                 </div>
             </header>
 
-            {analysis.sampled && (
-                <Callout title={`Analysed the first ${analysis.recordCount.toLocaleString()} of ${analysis.totalRecords.toLocaleString()} rows`}>
-                    {GLOSSARY.sampling}
-                </Callout>
-            )}
+            <div className="run-strip">
+                <CheckCircle2 aria-hidden="true" />
+                <p>
+                    <strong>All {meta.rows.toLocaleString()} rows analysed</strong> in {formatDuration(meta.elapsedMs)} on {meta.workers} CPU {meta.workers === 1 ? 'core' : 'cores'}.
+                </p>
+                <AccuracyBadge exact={meta.exactStats} />
+            </div>
 
             <div className="kpis">
-                <StatTile label="Records" value={analysis.totalRecords.toLocaleString()} info={GLOSSARY.records} />
-                <StatTile label="Features" value={dataset.columns.length} info={GLOSSARY.features} />
+                <StatTile label="Records" value={meta.rows.toLocaleString()} info={GLOSSARY.records} />
+                <StatTile label="Columns" value={meta.columns} info={GLOSSARY.features} />
                 <StatTile label="Numeric" value={analysis.numericCols.length} info={GLOSSARY.numeric} />
                 <StatTile label="Categorical" value={analysis.categoricalCols.length} info={GLOSSARY.categorical} />
+                {analysis.dateCols.length > 0 && <StatTile label="Dates" value={analysis.dateCols.length} info={GLOSSARY.dates} />}
                 <StatTile label="Completeness" value={formatPct(completeness)} tone={completeness === 100 ? 'good' : undefined} info={GLOSSARY.completeness} />
                 <StatTile label="Strong correlations" value={strong} info={GLOSSARY.strongCorrelations} />
             </div>
@@ -75,13 +74,7 @@ export default function ExplorerView({ dataset, analysis, tab, onTabChange, onEx
                 <ul role="tablist">
                     {EXPLORER_TABS.map((t) => (
                         <li key={t.id}>
-                            <button
-                                type="button"
-                                role="tab"
-                                aria-selected={t.id === active.id}
-                                className={t.id === active.id ? 'is-active' : ''}
-                                onClick={() => onTabChange(t.id)}
-                            >
+                            <button type="button" role="tab" aria-selected={t.id === active.id} className={t.id === active.id ? 'is-active' : ''} onClick={() => onTabChange(t.id)}>
                                 {t.label}
                             </button>
                         </li>

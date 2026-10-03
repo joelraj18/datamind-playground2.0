@@ -7,7 +7,8 @@ import { guessTarget } from '../lib/blueprints';
 
 const REPLY_DELAY_MS = 350;
 
-export default function AssistantView({ dataset, analysis, messages, onMessages }) {
+export default function AssistantView({ analysis, messages, onMessages }) {
+    const name = analysis.meta.fileName;
     const [input, setInput] = useState('');
     const [typing, setTyping] = useState(false);
     const endRef = useRef(null);
@@ -26,7 +27,7 @@ export default function AssistantView({ dataset, analysis, messages, onMessages 
         setInput('');
         setTyping(true);
         timer.current = setTimeout(() => {
-            onMessages((prev) => [...prev, { role: 'assistant', text: answer(question, dataset, analysis) }]);
+            onMessages((prev) => [...prev, { role: 'assistant', text: answer(question, analysis) }]);
             setTyping(false);
         }, REPLY_DELAY_MS);
     };
@@ -38,12 +39,12 @@ export default function AssistantView({ dataset, analysis, messages, onMessages 
         <div className="page page--assistant">
             <aside className="assistant__aside">
                 <p className="eyebrow">Talking about</p>
-                <h2 className="assistant__dataset" title={dataset.name}>
-                    {dataset.name}
+                <h2 className="assistant__dataset" title={name}>
+                    {name}
                 </h2>
                 <dl className="facts facts--compact">
                     <dt>Records</dt>
-                    <dd>{dataset.data.length.toLocaleString()}</dd>
+                    <dd>{analysis.meta.rows.toLocaleString()}</dd>
                     <dt>Numeric columns</dt>
                     <dd>{analysis.numericCols.length}</dd>
                     <dt>Categorical columns</dt>
@@ -70,7 +71,7 @@ export default function AssistantView({ dataset, analysis, messages, onMessages 
                 <div className="assistant__thread" aria-live="polite">
                     <div className="bubble bubble--bot">
                         <p>
-                            Hi! Ask me anything about <strong>{dataset.name}</strong>. I answer from the analysis computed on your device.
+                            Hi! Ask me anything about <strong>{name}</strong>. I answer from the analysis computed on your device.
                             <InfoTip text="Answers come from built-in rules over the computed statistics — no data is sent to an AI service." />
                         </p>
                     </div>
@@ -112,7 +113,7 @@ export default function AssistantView({ dataset, analysis, messages, onMessages 
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder={`e.g. What is the average of ${guessTarget(analysis.numericCols) ?? 'a column'}?`}
+                            placeholder={`e.g. What is the average of ${guessTarget(analysis) ?? 'a column'}?`}
                             autoComplete="off"
                         />
                         <button type="submit" className="composer__send" disabled={!input.trim() || typing} aria-label="Send">

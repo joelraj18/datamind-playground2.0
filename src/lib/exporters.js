@@ -1,51 +1,62 @@
-// Builders for the downloadable artifacts (CSV, Markdown report, Jupyter notebook, Python template).
+// Builders for the downloadable artifacts (Markdown report, Jupyter notebook, Python template).
 
-import Papa from 'papaparse';
-import { NOTABLE_CORRELATION, formatNumber, formatPct } from './analysis';
-import { guessTarget } from './blueprints';
+import { NOTABLE_CORRELATION, approx, formatNumber, formatPct } from './analysis';
+import { guessTarget, measureCols } from './blueprints';
 
-export function downloadFile(filename, content, type) {
-    const url = URL.createObjectURL(new Blob([content], { type }));
+export function downloadBlob(filename, blob) {
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export const baseName = (name) => name.replace(/\.(csv|json|tsv|txt)$/i, '');
+export const downloadFile = (filename, content, type) => downloadBlob(filename, new Blob([content], { type }));
+
+export const baseName = (name) => name.replace(/\.(csv|tsv|txt)$/i, '');
 
 const stripMarkup = (text) => text.replace(/\*\*/g, '');
 
 /** Python string literal for an arbitrary column name. */
 const py = (s) => `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 const pyList = (items) => `[${items.map(py).join(', ')}]`;
+const sepArg = (analysis) => {
+    const d = analysis.meta.delimiter;
+    if (d === ',') return '';
+    return `, sep=${d === '\t' ? "'\\t'" : py(d)}`;
+};
 
-export const buildCsv = (dataset) => Papa.unparse(dataset.data, { columns: dataset.columns });
+export function buildReport(analysis) {
+    const { stats, insights, correlations, categoricalDists, meta, numericDetails } = analysis;
 
-export function buildReport(dataset, analysis) {
-    const { stats, insights, correlations, categoricalDists } = analysis;
-
-    const columnSections = dataset.columns.map((col) => {
+    const columnSections = analysis.columns.map((col) => {
         const s = stats[col];
         if (s.type === 'numeric') {
+            if (s.empty) return `### ${col} (numeric)\n- No numeric values.`;
+            const a = approx(s.exact);
             return [
-                `### ${col} (numeric)`,
-                `- **Mean:** ${formatNumber(s.mean)}`,
-                `- **Median:** ${formatNumber(s.median)}`,
-                `- **Std dev:** ${formatNumber(s.std)}`,
-                `- **CV:** ${s.cv == null ? 'N/A' : formatPct(s.cv)}`,
-                `- **Range:** ${formatNumber(s.min)} – ${formatNumber(s.max)}`,
-                `- **Missing:** ${formatPct(s.missingPct)}`,
+                `### ${col} (numeric${s.exact ? '' : ', quantiles estimated ±0.1%'})`,
+                `- **Mean:** ${formatNumber(s.mean)}  ·  **Median:** ${a}${formatNumber(s.median)}  ·  **Std dev:** ${formatNumber(s.std)}`,
+                `- **Range:** ${formatNumber(s.min)} – ${formatNumber(s.max)}  ·  **IQR:** ${a}${formatNumber(s.iqr)}`,
+                `- **Skewness:** ${formatNumber(s.skewness)}  ·  **Excess kurtosis:** ${formatNumber(s.kurtosis)}  ·  **CV:** ${s.cv == null ? 'N/A' : formatPct(s.cv)}`,
+                `- **Percentiles:** ${numericDetails[col].percentiles.map((p) => `P${p.p} ${a}${formatNumber(p.value)}`).join(', ')}`,
+                `- **Outliers (1.5 × IQR):** ${formatNumber(s.outliers)} (${formatPct(s.outlierPct)})`,
+                `- **Missing:** ${formatPct(s.missingPct)}${s.invalid ? `  ·  **Not numeric:** ${formatNumber(s.invalid)}` : ''}`,
             ].join('\n');
         }
+        if (s.type === 'date') {
+            return [`### ${col} (date)`, `- **Range:** ${s.min} – ${s.max} (${formatNumber(s.spanDays)} days)`, `- **Missing:** ${formatPct(s.missingPct)}`].join('\n');
+        }
         const top = (categoricalDists[col] || [])
-            .slice(0, 3)
+            .slice(0, 5)
             .map((d) => `${d.name} (${d.percentage.toFixed(1)}%)`)
             .join(', ');
         return [
             `### ${col} (categorical)`,
-            `- **Unique values:** ${s.unique}`,
+            `- **Unique values:** ${s.uniqueExact ? '' : '≈ '}${formatNumber(s.unique)}`,
             `- **Mode:** ${s.mode}`,
             `- **Missing:** ${formatPct(s.missingPct)}`,
             `- **Top categories:** ${top}`,
@@ -56,10 +67,10 @@ export function buildReport(dataset, analysis) {
 
     return `# DataMind Analysis Report
 
-**Dataset:** ${dataset.name}
+**Dataset:** ${meta.fileName}
 **Date:** ${new Date().toLocaleDateString()}
-**Records:** ${dataset.data.length}
-**Features:** ${dataset.columns.length}
+**Records:** ${meta.rows.toLocaleString()} (all rows analysed)
+**Features:** ${meta.columns}
 
 ## Key insights
 
@@ -71,19 +82,20 @@ ${columnSections.join('\n\n')}
 
 ## Correlations (|r| > ${NOTABLE_CORRELATION})
 
-${notable.length ? notable.map((c) => `- **${c.col1}** vs **${c.col2}**: ${c.correlation.toFixed(3)}`).join('\n') : '_None found._'}
+${notable.length ? notable.map((c) => `- **${c.col1}** vs **${c.col2}**: r = ${c.correlation.toFixed(3)} (n = ${c.n.toLocaleString()})`).join('\n') : '_None found._'}
 
 ---
 *Generated by DataMind*
 `;
 }
 
-export function buildNotebook(dataset) {
+export function buildNotebook(analysis) {
+    const { meta } = analysis;
     const script = `import pandas as pd
 import numpy as np
 
 # Load the data (assumes the file sits next to this notebook)
-df = pd.read_csv(${py(dataset.name)})
+df = pd.read_csv(${py(meta.fileName)}${sepArg(analysis)})
 print(f"Loaded dataset with shape: {df.shape}")
 
 # 1. Overview
@@ -93,7 +105,9 @@ print(df.isnull().sum())
 
 # 2. Numeric summary
 print("\\nNumeric summary:")
-print(df.describe())
+print(df.describe(percentiles=[.01, .05, .25, .5, .75, .95, .99]))
+print("\\nSkewness:")
+print(df.skew(numeric_only=True))
 
 # 3. Top correlations
 numeric_cols = df.select_dtypes(include=[np.number]).columns
@@ -106,7 +120,7 @@ if len(numeric_cols) > 1:
 # 4. Categorical frequencies
 for col in df.select_dtypes(include='object').columns:
     print(f"\\n{col} frequencies (%):")
-    print(df[col].value_counts(normalize=True).mul(100).round(2))
+    print(df[col].value_counts(normalize=True).mul(100).round(2).head(15))
 `;
 
     const notebook = {
@@ -115,10 +129,10 @@ for col in df.select_dtypes(include='object').columns:
                 cell_type: 'markdown',
                 metadata: {},
                 source: [
-                    `# DataMind analysis: ${dataset.name}\n\n`,
+                    `# DataMind analysis: ${meta.fileName}\n\n`,
                     `**Generated:** ${new Date().toLocaleDateString()}  \n`,
-                    `**Records:** ${dataset.data.length}  \n`,
-                    `**Features:** ${dataset.columns.length}`,
+                    `**Records:** ${meta.rows.toLocaleString()}  \n`,
+                    `**Features:** ${meta.columns}`,
                 ],
             },
             { cell_type: 'code', execution_count: null, metadata: {}, outputs: [], source: [script] },
@@ -134,46 +148,57 @@ for col in df.select_dtypes(include='object').columns:
 }
 
 export function buildPythonTemplate(analysis) {
-    const { numericCols, categoricalCols } = analysis;
-    const target = guessTarget(numericCols);
-
+    const target = guessTarget(analysis);
     return `# Advanced EDA visualizations, generated by DataMind
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from scipy import stats
 
 sns.set_style("whitegrid")
 plt.rcParams["figure.figsize"] = (10, 6)
 
-# df = pd.read_csv("your_file.csv")
+# df = pd.read_csv(${py(analysis.meta.fileName)}${sepArg(analysis)})
 
-numerical_cols = ${pyList(numericCols)}
-categorical_cols = ${pyList(categoricalCols)}
+numerical_cols = ${pyList(measureCols(analysis))}
+categorical_cols = ${pyList(analysis.categoricalCols)}
+date_cols = ${pyList(analysis.dateCols)}
 
-# 1. Distributions
-if numerical_cols:
-    df[numerical_cols].hist(bins=30, figsize=(15, 12), edgecolor="black")
-    plt.suptitle("Distribution of numerical variables", fontsize=16)
+# 1. Distributions: histogram, box plot, cumulative distribution and Q-Q plot per column
+for col in numerical_cols:
+    data = df[col].dropna()
+    fig, axes = plt.subplots(1, 4, figsize=(20, 4))
+    sns.histplot(data, bins="fd", ax=axes[0], color="#5f7f45")
+    sns.boxplot(x=data, ax=axes[1], color="#cfdcbc")
+    sns.ecdfplot(data, ax=axes[2], color="#5f7f45")
+    stats.probplot(data, dist="norm", plot=axes[3])
+    fig.suptitle(col)
     plt.tight_layout()
-    plt.show()
-
-    df.boxplot(column=numerical_cols, figsize=(15, 6), vert=False)
-    plt.title("Outlier detection")
     plt.show()
 
 # 2. Correlation heatmap
 if len(numerical_cols) > 1:
-    sns.heatmap(df[numerical_cols].corr(), annot=True, cmap="BrBG", center=0, fmt=".2f")
+    sns.heatmap(df[numerical_cols].corr(), annot=True, cmap="BrBG", center=0, fmt=".2f", vmin=-1, vmax=1)
     plt.title("Correlation matrix")
     plt.show()
 
-# 3. Group statistics
+# 3. Group comparison
 target = ${target ? py(target) : 'None'}
 if target and categorical_cols:
-    print(df.groupby(categorical_cols[0])[target].agg(["count", "mean", "median", "std", "min", "max"]).round(2))
+    group = categorical_cols[0]
+    print(df.groupby(group)[target].describe())
+    sns.boxplot(data=df, x=group, y=target, color="#cfdcbc")
+    plt.title(f"{target} by {group}")
+    plt.show()
 
-# 4. Categorical frequencies
+# 4. Records over time
+for col in date_cols:
+    df[col] = pd.to_datetime(df[col], errors="coerce")
+    df.set_index(col).resample("MS").size().plot(title=f"Records per month ({col})", color="#5f7f45")
+    plt.show()
+
+# 5. Categorical frequencies
 for col in categorical_cols:
     order = df[col].value_counts().index[:15]
     sns.countplot(y=df[col], order=order, color="#5f7f45")
