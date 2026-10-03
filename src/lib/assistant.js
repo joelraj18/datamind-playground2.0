@@ -42,7 +42,7 @@ export function answer(rawQuery, analysis) {
             ? `Columns with missing or unusable values:\n${missing
                   .map((c) => `- **${c}**: ${formatPct(stats[c].missingPct)} missing${stats[c].invalid ? `, ${formatNumber(stats[c].invalid)} not numeric` : ''}`)
                   .join('\n')}`
-            : 'Good news — every column is **100% complete**.';
+            : 'Good news: every column is **100% complete**.';
     }
 
     if (has(query, ' cv', 'variab', 'volatil', 'inconsist', 'coefficient')) {
@@ -56,12 +56,12 @@ export function answer(rawQuery, analysis) {
 
     if (has(query, 'outlier', 'extreme', 'unusual')) {
         const cols = (numCol ? [numCol] : measures).filter((c) => stats[c].outliers > 0).sort((a, b) => stats[b].outlierPct - stats[a].outlierPct);
-        if (!cols.length) return 'No values fall outside 1.5 × IQR of their column — no outliers by the box-plot rule.';
-        return `Values beyond 1.5 × IQR (the box-plot rule):\n${cols
+        if (!cols.length) return 'No values fall outside 1.5 × IQR of their column, so there are no outliers by the box plot rule.';
+        return `Values beyond 1.5 × IQR (the box plot rule):\n${cols
             .slice(0, 6)
             .map((c) => {
                 const box = numericDetails[c].box;
-                return `- **${c}**: ${formatNumber(stats[c].outliers)} (${formatPct(stats[c].outlierPct)}) outside ${formatNumber(box.lowerFence)} – ${formatNumber(box.upperFence)}`;
+                return `- **${c}**: ${formatNumber(stats[c].outliers)} (${formatPct(stats[c].outlierPct)}) outside ${formatNumber(box.lowerFence)} to ${formatNumber(box.upperFence)}`;
             })
             .join('\n')}`;
     }
@@ -70,13 +70,13 @@ export function answer(rawQuery, analysis) {
         const strong = correlations.filter((c) => Math.abs(c.correlation) > 0.6).slice(0, 5);
         return strong.length
             ? `Strongest correlations (|r| > 0.6), computed over all rows:\n${strong.map((c) => `- **${c.col1}** & **${c.col2}**: ${c.correlation.toFixed(2)}`).join('\n')}`
-            : 'No strong correlations (|r| > 0.6) were found. The relationships may be weak or non-linear.';
+            : 'No strong correlations (|r| > 0.6) were found. The relationships may be weak or not linear.';
     }
 
     if (has(query, 'percentile', 'quantile', 'p90', 'p95', 'p99')) {
         if (!numCol) return `Which numeric column? Try one of: ${list(measures)}.`;
         const s = stats[numCol];
-        return `Percentiles of **${numCol}**${s.exact ? '' : ' (estimated to ±0.1%)'}:\n${numericDetails[numCol].percentiles
+        return `Percentiles of **${numCol}**${s.exact ? '' : ' (estimated to within 0.1%)'}:\n${numericDetails[numCol].percentiles
             .map((p) => `- P${p.p}: ${approx(s.exact)}${formatNumber(p.value)}`)
             .join('\n')}`;
     }
@@ -84,7 +84,7 @@ export function answer(rawQuery, analysis) {
     if (has(query, 'skew', 'shape', 'normal')) {
         if (!numCol) return `Which numeric column? Try one of: ${list(measures)}.`;
         const s = stats[numCol];
-        const shape = Math.abs(s.skewness) < 0.5 ? 'roughly symmetric' : s.skewness > 0 ? 'right-skewed (a long tail of high values)' : 'left-skewed (a long tail of low values)';
+        const shape = Math.abs(s.skewness) < 0.5 ? 'roughly symmetric' : s.skewness > 0 ? 'skewed to the right (a long tail of high values)' : 'skewed to the left (a long tail of low values)';
         return `**${numCol}** is ${shape}: skewness ${formatNumber(s.skewness)}, excess kurtosis ${formatNumber(s.kurtosis)}. Compare its Q-Q plot in Explore → Univariate to see how far it departs from a normal distribution.`;
     }
 

@@ -27,8 +27,8 @@ test('register, analyse the sample, explore every view and ask a question', asyn
 
     fireEvent.click(screen.getByRole('button', { name: /Try a sample dataset/ }));
     expect(await screen.findByText(/rows read/)).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'sample_phone_sales' }, { timeout: 15000 })).toBeInTheDocument();
-    expect(screen.getAllByText(/All 20,000 rows analysed/).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/All 20,000 rows analysed/, {}, { timeout: 15000 })).length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'Phone sales sample' })).toBeInTheDocument();
 
     // Overview: column catalogue and preview.
     expect(screen.getByRole('tabpanel', { name: 'Overview' })).toHaveTextContent('OrderDate');

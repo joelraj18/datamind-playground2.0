@@ -195,7 +195,9 @@ code {
     letter-spacing: -0.01em;
 }
 
+/* The lighter half sits on its own line, so the heading needs no punctuation between them. */
 .section-title__soft {
+    flex-basis: 100%;
     color: var(--ink-3);
 }
 

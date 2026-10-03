@@ -233,7 +233,7 @@ export function CorrelationMatrixChart({ columns, lookup }) {
                     +1
                 </text>
                 <text x={left + 6} y={legendY + 24} {...TEXT}>
-                    moves opposite · no relation · moves together
+                    move apart · no relation · move together
                 </text>
             </svg>
         </div>

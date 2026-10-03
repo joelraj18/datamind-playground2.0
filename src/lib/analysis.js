@@ -11,9 +11,17 @@ export const correlationBetween = (correlations, a, b) => {
     return hit ? hit.correlation : 0;
 };
 
-/** Human-friendly number formatting shared across the app. */
+/** A file name for headings: no extension, and underscores or hyphens shown as spaces. */
+export const displayName = (fileName = '') =>
+    fileName
+        .replace(/\.(csv|tsv|txt)$/i, '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim() || fileName;
+
+/** Human friendly number formatting shared across the app. */
 export function formatNumber(value, digits = 2) {
-    if (value == null || Number.isNaN(value)) return '—';
+    if (value == null || Number.isNaN(value)) return 'n/a';
     if (!Number.isFinite(value)) return '∞';
     if (Math.abs(value) < 0.5 * 10 ** -digits) value = 0; // never print "-0"
     const abs = Math.abs(value);
@@ -21,11 +29,11 @@ export function formatNumber(value, digits = 2) {
     return value.toLocaleString(undefined, { maximumFractionDigits: Number.isInteger(value) ? 0 : digits });
 }
 
-export const formatPct = (value, digits = 1) => (value == null || Number.isNaN(value) ? '—' : `${value.toFixed(digits)}%`);
+export const formatPct = (value, digits = 1) => (value == null || Number.isNaN(value) ? 'n/a' : `${value.toFixed(digits)}%`);
 
 /** 1.2K, 3.4M, 1.0B — for counters and axis ticks. */
 export function formatCompact(value) {
-    if (value == null || Number.isNaN(value)) return '—';
+    if (value == null || Number.isNaN(value)) return 'n/a';
     return Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
 
@@ -37,7 +45,7 @@ export function formatBytes(bytes) {
 }
 
 export function formatDuration(ms) {
-    if (!Number.isFinite(ms) || ms < 0) return '—';
+    if (!Number.isFinite(ms) || ms < 0) return 'n/a';
     const s = Math.round(ms / 1000);
     if (s < 1) return 'under a second';
     if (s < 60) return `${s} s`;

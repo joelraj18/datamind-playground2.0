@@ -13,7 +13,8 @@ const PNG_SCALE = 2;
 // Interaction-only layers that must not appear in an exported image.
 const TRANSIENT = '.recharts-tooltip-cursor, .recharts-active-dot, .recharts-tooltip-wrapper, [data-export="skip"]';
 
-const safeName = (s) => s.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80) || 'chart';
+// Readable file names: keep letters, digits and spaces; drop characters file systems reject.
+const safeName = (s) => s.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'chart';
 
 function textNode(text, x, y, { size = 13, weight = 400, fill = '#1d1d1f', anchor = 'start' } = {}) {
     const t = document.createElementNS(SVG_NS, 'text');

@@ -13,7 +13,7 @@ beforeAll(async () => {
 
 describe('formatters', () => {
     test('numbers, sizes and durations', () => {
-        expect(formatNumber(null)).toBe('—');
+        expect(formatNumber(null)).toBe('n/a');
         expect(formatNumber(Infinity)).toBe('∞');
         expect(formatNumber(-0.0001)).toBe('0');
         expect(formatBytes(1500)).toBe('1.5 KB');

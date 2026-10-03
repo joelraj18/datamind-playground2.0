@@ -2,7 +2,7 @@ import React from 'react';
 import { CheckCircle2, Download, FileText, NotebookPen } from 'lucide-react';
 import { AccuracyBadge } from '../../components/ChartCard';
 import { StatTile } from '../../components/ui';
-import { STRONG_CORRELATION, formatBytes, formatDuration, formatPct } from '../../lib/analysis';
+import { STRONG_CORRELATION, displayName, formatBytes, formatDuration, formatPct } from '../../lib/analysis';
 import { qualitySummary } from '../../lib/blueprints';
 import { GLOSSARY } from '../../lib/glossary';
 import OverviewTab from './OverviewTab';
@@ -36,7 +36,7 @@ export default function ExplorerView({ dataset, analysis, tab, onTabChange, onEx
                 <div>
                     <p className="eyebrow">Explore</p>
                     <h1 className="display display--md" title={dataset.name}>
-                        {dataset.name.replace(/\.(csv|tsv|txt)$/i, '')}
+                        {displayName(dataset.name)}
                     </h1>
                 </div>
                 <div className="page-hero__links">

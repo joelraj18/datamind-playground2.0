@@ -4,7 +4,7 @@ import { ChartCard, Segmented, SelectPill } from '../../components/ChartCard';
 import { GroupMeansChart, ScatterTrendChart } from '../../components/charts';
 import { CorrelationMatrixChart, GroupBoxPlotChart } from '../../components/svgCharts';
 import { Callout, Card, DataTable, EmptyState, SectionTitle } from '../../components/ui';
-import { NOTABLE_CORRELATION, STRONG_CORRELATION, approx, correlationBetween, formatNumber, pairKey } from '../../lib/analysis';
+import { NOTABLE_CORRELATION, STRONG_CORRELATION, approx, correlationBetween, displayName, formatNumber, pairKey } from '../../lib/analysis';
 import { guessTarget, measureCols } from '../../lib/blueprints';
 import { GLOSSARY } from '../../lib/glossary';
 import { CHART, divergingColor } from '../../lib/palette';
@@ -16,28 +16,28 @@ const options = (cols) => cols.map((c) => ({ value: c, label: c }));
 export function CorrelationTab({ analysis }) {
     const { correlations, meta } = analysis;
     const cols = measureCols(analysis).filter((c) => correlations.some((p) => p.col1 === c || p.col2 === c));
-    if (cols.length < 2) return <EmptyState title="Correlation needs at least two numeric (non-ID) columns." />;
+    if (cols.length < 2) return <EmptyState title="Correlation needs at least two numeric columns that are not IDs" />;
     const top = correlations.filter((c) => Math.abs(c.correlation) > NOTABLE_CORRELATION).slice(0, 8);
     const lookup = (a, b) => correlationBetween(correlations, a, b);
 
     return (
         <div className="stack-xl">
-            <SectionTitle strong="Correlation." soft="Which columns move together." info={GLOSSARY.correlation} />
+            <SectionTitle strong="Correlation" soft="Which columns move together" info={GLOSSARY.correlation} />
             <ChartCard
                 eyebrow={`Pearson’s r · all ${meta.rows.toLocaleString()} rows`}
                 title="Correlation matrix"
                 info={GLOSSARY.correlation}
                 exact
                 getExport={() => ({
-                    filename: 'correlation_matrix',
+                    filename: 'Correlation matrix',
                     title: 'Correlation matrix (Pearson’s r)',
-                    subtitle: `${meta.fileName} · ${meta.rows.toLocaleString()} rows · pairwise-complete`,
+                    subtitle: `${displayName(meta.fileName)} · ${meta.rows.toLocaleString()} rows · each pair uses every row where both have values`,
                     legend: [
-                        { label: '−1 moves opposite', color: divergingColor(-1) },
-                        { label: '0 no linear relation', color: divergingColor(0) },
-                        { label: '+1 moves together', color: divergingColor(1) },
+                        { label: 'r = −1: move in opposite directions', color: divergingColor(-1) },
+                        { label: 'r = 0: no linear relation', color: divergingColor(0) },
+                        { label: 'r = +1: move together', color: divergingColor(1) },
                     ],
-                    rows: cols.map((row) => ({ column: row, ...Object.fromEntries(cols.map((c) => [c, lookup(row, c)])) })),
+                    rows: cols.map((row) => ({ Column: row, ...Object.fromEntries(cols.map((c) => [c, lookup(row, c)])) })),
                 })}
             >
                 <CorrelationMatrixChart columns={cols} lookup={lookup} />
@@ -62,7 +62,7 @@ export function CorrelationTab({ analysis }) {
                 )}
             </Card>
             <Callout title="Correlation is not causation">
-                A high r means two columns tend to move together. It doesn’t tell you that one causes the other — a third factor may drive both. Pearson’s r also only captures straight-line
+                A high r means two columns tend to move together. It doesn’t tell you that one causes the other, because a third factor may drive both. Pearson’s r also only captures straight line
                 relationships; check the scatter plot in Bivariate for curves.
             </Callout>
         </div>
@@ -110,9 +110,9 @@ function ScatterSection({ analysis }) {
                 </>
             }
             getExport={() => ({
-                filename: `scatter_${y}_vs_${x}`,
+                filename: `${y} vs ${x} scatter`,
                 title: `${y} vs ${x}`,
-                subtitle: `${sampled ? `${points.length.toLocaleString()} randomly sampled rows; ` : ''}least-squares line fitted on all ${analysis.meta.rows.toLocaleString()} rows${fit ? ` · r = ${fit.r.toFixed(3)}` : ''}`,
+                subtitle: `${sampled ? `${points.length.toLocaleString()} randomly sampled rows; ` : ''}least squares line fitted on all ${analysis.meta.rows.toLocaleString()} rows${fit ? ` · r = ${fit.r.toFixed(3)}` : ''}`,
                 legend: [
                     { label: sampled ? 'Sampled rows' : 'Rows', color: CHART.primary, shape: 'dot' },
                     { label: 'Trend (all rows)', color: CHART.accent },
@@ -164,9 +164,9 @@ export function BivariateTab({ analysis }) {
 
     return (
         <div className="stack-xl">
-            <SectionTitle strong="Compare groups." soft="See how a category shifts a number." info={GLOSSARY.bivariate} />
+            <SectionTitle strong="Compare groups" soft="See how a category shifts a number" info={GLOSSARY.bivariate} />
             {!chartableCatCols.length || !nums.length ? (
-                <EmptyState title="Group comparisons need a numeric column and a categorical column with 2–14 values." />
+                <EmptyState title="Group comparisons need a numeric column and a categorical column with 2 to 14 values" />
             ) : (
                 <>
                     <div className="filters">
@@ -190,9 +190,9 @@ export function BivariateTab({ analysis }) {
                             />
                         }
                         getExport={() => ({
-                            filename: `${numCol}_by_${catCol}_${view}`,
+                            filename: `${numCol} by ${catCol} ${view === 'means' ? 'means' : 'box plots'}`,
                             title: `${numCol} by ${catCol}`,
-                            subtitle: `${view === 'means' ? 'Mean (bars) and median (dots)' : 'Box plots: IQR, median, whiskers at 1.5 × IQR'} · all ${analysis.meta.rows.toLocaleString()} rows${exact ? '' : ' · medians ≈ ±0.5%'}`,
+                            subtitle: `${view === 'means' ? 'Mean (bars) and median (dots)' : 'Box plots: IQR, median, whiskers at 1.5 × IQR'} · all ${analysis.meta.rows.toLocaleString()} rows${exact ? '' : ' · medians within 0.5%'}`,
                             legend:
                                 view === 'means'
                                     ? [
@@ -200,11 +200,11 @@ export function BivariateTab({ analysis }) {
                                           { label: 'Median', color: CHART.accent, shape: 'dot' },
                                       ]
                                     : [
-                                          { label: 'Q1–Q3', color: CHART.soft },
+                                          { label: 'Q1 to Q3', color: CHART.soft },
                                           { label: 'Median', color: CHART.accent },
                                           { label: 'Outlier extremes', color: CHART.warn, shape: 'dot' },
                                       ],
-                            rows: data.map(({ category, count, mean, median, q1, q3, std, min, max, whiskerLow, whiskerHigh, outliers }) => ({ [catCol]: category, records: count, mean, median, q1, q3, std, min, max, whisker_low: whiskerLow, whisker_high: whiskerHigh, outliers })),
+                            rows: data.map(({ category, count, mean, median, q1, q3, std, min, max, whiskerLow, whiskerHigh, outliers }) => ({ [catCol]: category, Records: count, Mean: mean, Median: median, Q1: q1, Q3: q3, 'Std dev': std, Min: min, Max: max, 'Lower whisker': whiskerLow, 'Upper whisker': whiskerHigh, Outliers: outliers })),
                         })}
                         minHeight={340}
                     >
@@ -230,7 +230,7 @@ export function BivariateTab({ analysis }) {
                 </>
             )}
 
-            <SectionTitle strong="Scatter." soft="Two numbers, side by side." info={GLOSSARY.scatter} />
+            <SectionTitle strong="Scatter" soft="Two numbers, side by side" info={GLOSSARY.scatter} />
             <ScatterSection analysis={analysis} />
         </div>
     );

@@ -448,7 +448,7 @@ function timeline(merged, plan, t) {
 
 /* ---------- Insights ---------- */
 
-const fmt = (v) => (Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—');
+const fmt = (v) => (Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : 'n/a');
 
 function buildInsights(analysis) {
     const { stats, numericCols, categoricalCols, dateCols, correlations: corrs, meta, idCols } = analysis;
@@ -459,10 +459,10 @@ function buildInsights(analysis) {
         const s = stats[col];
         if (idCols.includes(col)) continue;
         if (Math.abs(s.skewness) > 1) {
-            add('Analyst', 'warning', `**${col}** is strongly ${s.skewness > 0 ? 'right' : 'left'}-skewed (skewness ${s.skewness.toFixed(2)}): the mean ${fmt(s.mean)} is pulled ${s.skewness > 0 ? 'above' : 'below'} the median ${fmt(s.median)}.`);
+            add('Analyst', 'warning', `**${col}** is strongly skewed to the ${s.skewness > 0 ? 'right' : 'left'} (skewness ${s.skewness.toFixed(2)}): the mean ${fmt(s.mean)} is pulled ${s.skewness > 0 ? 'above' : 'below'} the median ${fmt(s.median)}.`);
         }
         if (s.outlierPct > 1) {
-            add('Analyst', 'warning', `**${col}** has ${fmt(s.outliers)} outliers (${s.outlierPct.toFixed(1)}%) beyond 1.5 × IQR — up to ${fmt(s.max)}. Check whether they are errors or a **premium segment**.`);
+            add('Analyst', 'warning', `**${col}** has ${fmt(s.outliers)} outliers (${s.outlierPct.toFixed(1)}%) beyond 1.5 × IQR, reaching up to ${fmt(s.max)}. Check whether they are errors or a **premium segment**.`);
         }
         if (s.invalid > 0) {
             const examples = analysis.numericDetails[col].invalidExamples;
@@ -526,7 +526,7 @@ export function finalize(merged, plan, meta) {
             count: present,
             unique: pruned ? Math.max(hllEstimate(hll), counts.size) : counts.size,
             uniqueExact: !pruned,
-            mode: sorted[0]?.[0] ?? '—',
+            mode: sorted[0]?.[0] ?? 'n/a',
             modePct: present && sorted[0] ? (sorted[0][1] / present) * 100 : 0,
             missing,
             missingPct: rows ? (missing / rows) * 100 : 0,

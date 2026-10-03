@@ -3,7 +3,7 @@ import { Check, Copy, Gem, Users } from 'lucide-react';
 import { ChartCard } from '../../components/ChartCard';
 import { MissingChart } from '../../components/charts';
 import { Callout, Card, DataTable, EmptyState, InfoTip, RichText, SectionTitle, StatTile } from '../../components/ui';
-import { STRONG_CORRELATION, formatNumber, formatPct } from '../../lib/analysis';
+import { STRONG_CORRELATION, displayName, formatNumber, formatPct } from '../../lib/analysis';
 import { decisionSummary, predictiveSummary, qualitySummary, segmentationSummary } from '../../lib/blueprints';
 import { buildPythonTemplate } from '../../lib/exporters';
 import { GLOSSARY } from '../../lib/glossary';
@@ -17,7 +17,7 @@ const AGENT_TONE = { warning: 'warning', success: 'success', info: 'info' };
 export function InsightsTab({ analysis }) {
     return (
         <div className="stack-xl">
-            <SectionTitle strong="Insights." soft="What stood out in your data." info={GLOSSARY.insights} />
+            <SectionTitle strong="Insights" soft="What stood out in your data" info={GLOSSARY.insights} />
             <div className="stack">
                 {analysis.insights.map((insight, i) => (
                     <Callout key={i} tone={AGENT_TONE[insight.type]} title={insight.agent}>
@@ -36,7 +36,7 @@ export function DecisionTab({ analysis }) {
 
     return (
         <div className="stack-xl">
-            <SectionTitle strong="Decision Center." soft="The few things worth acting on." info={GLOSSARY.decision} />
+            <SectionTitle strong="Decision Center" soft="The few things worth acting on" info={GLOSSARY.decision} />
             <div className="grid grid--3">
                 <StatTile label="Risks flagged" value={risks.length} tone={risks.length ? 'warn' : 'good'} hint="Skew, outliers or gaps" />
                 <StatTile label="Strong drivers" value={drivers.length} hint={`Pairs with |r| ≥ ${STRONG_CORRELATION}`} info={GLOSSARY.strongCorrelations} />
@@ -70,7 +70,7 @@ export function DecisionTab({ analysis }) {
                         ))}
                     </ul>
                 ) : (
-                    <p className="text-muted">No strong linear relationships (|r| ≥ {STRONG_CORRELATION}). Relationships may be weak or non-linear.</p>
+                    <p className="text-muted">No strong linear relationships (|r| ≥ {STRONG_CORRELATION}). Relationships may be weak or not linear.</p>
                 )}
             </Card>
 
@@ -82,7 +82,7 @@ export function DecisionTab({ analysis }) {
                                 <p>
                                     <strong>{u.col}</strong> varies widely (CV {formatPct(u.cv)}).
                                 </p>
-                                <p className="text-muted">Action: treat single values with caution; the spread may hide distinct high-value segments worth splitting out.</p>
+                                <p className="text-muted">Action: treat single values with caution; the spread may hide distinct high value segments worth splitting out.</p>
                             </li>
                         ))}
                     </ul>
@@ -103,10 +103,10 @@ export function QualityTab({ analysis }) {
 
     return (
         <div className="stack-xl">
-            <SectionTitle strong="Data quality." soft="A health check before you trust the numbers." info={GLOSSARY.quality} />
+            <SectionTitle strong="Data quality" soft="A health check before you trust the numbers" info={GLOSSARY.quality} />
             <div className="grid grid--3">
                 <StatTile label="Completeness" value={formatPct(completeness, 2)} tone={completeness === 100 ? 'good' : 'warn'} info={GLOSSARY.completeness} />
-                <StatTile label="Rows analysed" value={meta.rows.toLocaleString()} hint={meta.malformedRows ? `${formatNumber(meta.malformedRows)} malformed` : 'all well-formed'} info={GLOSSARY.records} />
+                <StatTile label="Rows analysed" value={meta.rows.toLocaleString()} hint={meta.malformedRows ? `${formatNumber(meta.malformedRows)} malformed` : 'all well formed'} info={GLOSSARY.records} />
                 <StatTile
                     label="Column types"
                     value={`${numericCols.length} · ${categoricalCols.length}${dateCols.length ? ` · ${dateCols.length}` : ''}`}
@@ -122,10 +122,10 @@ export function QualityTab({ analysis }) {
                     info={GLOSSARY.missing}
                     exact
                     getExport={() => ({
-                        filename: 'missing_values',
+                        filename: 'Missing values',
                         title: 'Missing and unusable values per column',
-                        subtitle: `${meta.fileName} · ${meta.rows.toLocaleString()} rows`,
-                        rows: missing.map((m) => ({ column: m.col, unusable_cells: m.rows, not_numeric: m.invalid, share_pct: m.pct })),
+                        subtitle: `${displayName(meta.fileName)} · ${meta.rows.toLocaleString()} rows`,
+                        rows: missing.map((m) => ({ Column: m.col, 'Unusable cells': m.rows, 'Not numeric': m.invalid, 'Share (%)': m.pct })),
                     })}
                     minHeight={140}
                 >
@@ -190,7 +190,7 @@ export function SegmentationTab({ analysis }) {
 
     return (
         <div className="stack-xl">
-            <SectionTitle strong="Segmentation." soft="Two profiles to start from." info={GLOSSARY.segmentation} />
+            <SectionTitle strong="Segmentation" soft="Two profiles to start from" info={GLOSSARY.segmentation} />
             <div className="grid grid--2">
                 <Card className="segment" eyebrow="Value" title={<><Gem aria-hidden="true" className="segment__icon" /> Premium segment</>}>
                     {premium ? (
@@ -212,10 +212,10 @@ export function SegmentationTab({ analysis }) {
                                     </>
                                 )}
                             </dl>
-                            <p className="text-muted">Action: lead with premium features and service for this group — it carries the highest value per record.</p>
+                            <p className="text-muted">Action: lead with premium features and service for this group, as it carries the highest value per record.</p>
                         </>
                     ) : (
-                        <p className="text-muted">Needs a numeric target and a categorical column with 2–14 values.</p>
+                        <p className="text-muted">Needs a numeric target and a categorical column with 2 to 14 values.</p>
                     )}
                 </Card>
                 <Card className="segment" eyebrow="Volume" title={<><Users aria-hidden="true" className="segment__icon" /> Core segment</>}>
@@ -228,7 +228,7 @@ export function SegmentationTab({ analysis }) {
                                 <dt>Share of records</dt>
                                 <dd>{formatPct(volume.pct)}</dd>
                             </dl>
-                            <p className="text-muted">Action: optimise for reliability and affordability here — this group provides scale and stability.</p>
+                            <p className="text-muted">Action: optimise for reliability and affordability here, as this group provides scale and stability.</p>
                         </>
                     ) : (
                         <p className="text-muted">No categorical column with a clear majority group.</p>
@@ -238,7 +238,7 @@ export function SegmentationTab({ analysis }) {
             {target && (
                 <Callout title="How the target was chosen">
                     <strong>{target}</strong> was picked as the value column because its name suggests price, revenue or similar. If that’s wrong, the
-                    profiles above still describe the column’s highest-mean group.
+                    profiles above still describe the column’s group with the highest mean.
                 </Callout>
             )}
         </div>
@@ -249,7 +249,7 @@ export function SegmentationTab({ analysis }) {
 
 export function PredictiveTab({ analysis }) {
     const { target, predictors, skewed, best, worst } = predictiveSummary(analysis);
-    if (!target || analysis.numericCols.length < 2) return <EmptyState title="Predictive analysis needs at least two numeric columns." />;
+    if (!target || analysis.numericCols.length < 2) return <EmptyState title="Predictive analysis needs at least two numeric columns" />;
 
     const columns = [
         { key: 'col', label: 'Feature' },
@@ -260,8 +260,8 @@ export function PredictiveTab({ analysis }) {
 
     return (
         <div className="stack-xl">
-            <SectionTitle strong="Predictive blueprint." soft={`What best explains ${target}.`} info={GLOSSARY.predictive} />
-            <Card eyebrow="01" title="Top risk-adjusted predictors" info={GLOSSARY.riskScore}>
+            <SectionTitle strong="Predictive blueprint" soft={`What best explains ${target}`} info={GLOSSARY.predictive} />
+            <Card eyebrow="01" title="Top predictors, adjusted for risk" info={GLOSSARY.riskScore}>
                 {predictors.length ? (
                     <DataTable columns={columns} rows={predictors} rowKey={(r) => r.col} />
                 ) : (
@@ -279,7 +279,7 @@ export function PredictiveTab({ analysis }) {
                             ))}
                         </ul>
                     ) : (
-                        <p className="text-muted">No group is strongly right-skewed.</p>
+                        <p className="text-muted">No group is strongly skewed to the right.</p>
                     )}
                 </Card>
                 <Card eyebrow="03" title="Best vs worst case">
@@ -295,7 +295,7 @@ export function PredictiveTab({ analysis }) {
                             </dd>
                         </dl>
                     ) : (
-                        <p className="text-muted">Needs a categorical column with 2–14 values.</p>
+                        <p className="text-muted">Needs a categorical column with 2 to 14 values.</p>
                     )}
                 </Card>
             </div>
@@ -321,7 +321,7 @@ export function TemplateTab({ analysis }) {
 
     return (
         <div className="stack-xl">
-            <SectionTitle strong="Python template." soft="Reproduce it in Jupyter." info={GLOSSARY.template} />
+            <SectionTitle strong="Python template" soft="Reproduce it in Jupyter" info={GLOSSARY.template} />
             <Card
                 title="Paste into a notebook cell"
                 actions={
