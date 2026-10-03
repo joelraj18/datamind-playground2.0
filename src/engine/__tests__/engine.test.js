@@ -198,6 +198,30 @@ describe.each([
     });
 });
 
+describe('dense integer counters (streaming mode)', () => {
+    // 20,000 rows: a whole-number column with ~15,000 distinct values (exact via dense counters)
+    // and a column that turns fractional late in the file (must fall back to the sketch).
+    const rows = Array.from({ length: 20000 }, (_, i) => {
+        const units = (i * 7919) % 15000;
+        const late = i < 15000 ? i % 3000 : (i % 3000) + 0.5;
+        return { units, late };
+    });
+    const text = `units,late\n${rows.map((r) => `${r.units},${r.late}`).join('\n')}\n`;
+
+    test.each([1, 3])('exact quantiles for whole numbers across %i range(s)', async (parts) => {
+        const a = await analyseInParts(text, parts, 'stream');
+        const sorted = sortedNums(rows.map((r) => r.units));
+        expect(a.stats.units.exact).toBe(true);
+        expect(a.stats.units.median).toBe(q7(sorted, 0.5));
+        expect(a.stats.units.q1).toBe(q7(sorted, 0.25));
+        expect(a.numericDetails.units.histograms.auto.reduce((s, b) => s + b.count, 0)).toBe(20000);
+
+        const lateSorted = sortedNums(rows.map((r) => r.late));
+        expect(a.stats.late.exact).toBe(false);
+        expect(Math.abs(a.stats.late.median - q7(lateSorted, 0.5)) / q7(lateSorted, 0.5)).toBeLessThan(0.0025);
+    });
+});
+
 describe('analyzeFile (main-thread fallback)', () => {
     test('handles CRLF, BOM, semicolons and invalid numbers', async () => {
         const good = Array.from({ length: 12 }, (_, k) => `${k};${k % 2 ? 'x' : 'y'};2024-01-0${1 + (k % 9)}`);

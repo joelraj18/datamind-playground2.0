@@ -31,8 +31,8 @@ export function formatCompact(value) {
 export function formatBytes(bytes) {
     if (!bytes) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
-    return `${(bytes / 1024 ** i).toFixed(i ? 1 : 0)} ${units[i]}`;
+    const i = Math.min(units.length - 1, Math.floor(Math.log10(bytes) / 3));
+    return `${(bytes / 1000 ** i).toFixed(i ? 1 : 0)} ${units[i]}`;
 }
 
 export function formatDuration(ms) {

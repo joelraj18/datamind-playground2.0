@@ -21,6 +21,8 @@ export class AnalysisCancelled extends Error {
     }
 }
 
+const EXPECTED_BYTES_PER_MS_PER_CORE = 20_000;
+
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 export function startAnalysis(file, { onProgress = () => {}, forceMode, maxWorkers } = {}) {
@@ -70,8 +72,8 @@ export function startAnalysis(file, { onProgress = () => {}, forceMode, maxWorke
         const ranges = splitRanges(plan);
         const bytesTotal = Math.max(1, file.size - plan.dataStart);
 
-        // First guess from the main-thread benchmark; replaced by live rates once workers report.
-        const estimatedMs = bytesTotal / (sniffed.benchmarkBytesPerMs * ranges.length * 2);
+        // First guess (measured in Chrome: ~20 MB/s per core), replaced by live rates once workers report.
+        const estimatedMs = 400 + bytesTotal / (EXPECTED_BYTES_PER_MS_PER_CORE * ranges.length ** 0.9);
         const progress = ranges.map(() => ({ bytesDone: 0, rows: 0 }));
         const emit = (phase = 'scanning') =>
             onProgress({

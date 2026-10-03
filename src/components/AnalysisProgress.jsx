@@ -15,7 +15,7 @@ const PHASES = {
  * averages, the row counter is extrapolated between events, and the ETA counts down in real time.
  */
 function useLiveProgress(progress) {
-    const track = useRef({ t: 0, rows: 0, bytes: 0, rowRate: 0, byteRate: 0, eta: null });
+    const track = useRef({ t: 0, rows: 0, bytes: 0, rowRate: 0, byteRate: 0, eta: null, shown: 0 });
     const [, setFrame] = useState(0);
 
     useEffect(() => {
@@ -54,9 +54,14 @@ function useLiveProgress(progress) {
 
     const s = track.current;
     const now = performance.now();
-    const since = (now - s.t) / 1000;
-    const ceiling = progress.estimatedRows ? Math.max(progress.rows, progress.estimatedRows) : Infinity;
-    const liveRows = progress.phase === 'scanning' ? Math.min(ceiling, s.rows + s.rowRate * Math.min(since, 1.5)) : progress.rows;
+    let liveRows = progress.rows;
+    if (progress.phase === 'scanning') {
+        // Extrapolate between events, never past the projected total, and never backwards.
+        const projected = progress.bytesDone > 0 ? (progress.rows * progress.bytesTotal) / progress.bytesDone : progress.estimatedRows || Infinity;
+        const since = Math.min((now - s.t) / 1000, 0.6);
+        liveRows = Math.max(s.shown, Math.min(projected, s.rows + s.rowRate * since));
+        s.shown = liveRows;
+    }
     const eta = s.eta == null ? null : Math.max(0, s.eta - (now - (s.etaAt || now)));
     return { liveRows, rowRate: s.rowRate, byteRate: s.byteRate, eta };
 }
@@ -87,7 +92,7 @@ export default function AnalysisProgress({ fileName, progress, onCancel }) {
                                 <InfoTip text={GLOSSARY.speed} />
                             </>
                         ) : null}
-                        {progress.exact !== undefined && <> · {progress.exact ? 'exact statistics' : 'streaming mode (quantiles ±0.1%)'}</>}
+                        {progress.exact !== undefined && <> · {progress.exact ? 'all values held in memory' : 'streaming mode'}</>}
                     </p>
                 </div>
                 <button type="button" className="btn btn--ghost" onClick={onCancel}>
@@ -107,7 +112,8 @@ export default function AnalysisProgress({ fileName, progress, onCancel }) {
                 <span style={{ width: `${finalising ? 100 : fraction * 100}%` }} className={finalising ? 'is-pulsing' : ''} />
             </div>
             <p className="progress-card__phase">
-                {PHASES[progress.phase] || 'Working…'} {progress.phase === 'scanning' && <strong>{(fraction * 100).toFixed(1)}%</strong>}
+                {progress.phase === 'scanning' && !progress.rows ? `Starting ${progress.workers} background ${progress.workers === 1 ? 'worker' : 'workers'}…` : PHASES[progress.phase] || 'Working…'}{' '}
+                {progress.phase === 'scanning' && <strong>{(fraction * 100).toFixed(1)}%</strong>}
             </p>
 
             <dl className="progress-stats">
@@ -117,7 +123,7 @@ export default function AnalysisProgress({ fileName, progress, onCancel }) {
                 </div>
                 <div>
                     <dt>Time remaining</dt>
-                    <dd>{finalising ? 'a moment' : eta == null ? 'estimating…' : `about ${formatDuration(eta)}`}</dd>
+                    <dd>{finalising ? 'a moment' : eta == null ? 'estimating…' : eta < 1000 ? 'less than a second' : `about ${formatDuration(eta)}`}</dd>
                 </div>
                 <div>
                     <dt>Speed</dt>

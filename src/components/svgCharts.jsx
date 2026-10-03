@@ -192,7 +192,7 @@ export function CorrelationMatrixChart({ columns, lookup }) {
                                 <rect x={left + cell * j + 1.5} y={top + cell * i + 1.5} width={cell - 3} height={cell - 3} rx={6} fill={divergingColor(r)} />
                                 {cell >= 34 && (
                                     <text x={left + cell * j + cell / 2} y={top + cell * i + cell / 2 + 4} textAnchor="middle" fontSize={11} fontWeight={i === j ? 700 : 500} fill={divergingInk(r)}>
-                                        {r.toFixed(2)}
+                                        {Math.abs(r) < 0.005 ? '0.00' : r.toFixed(2)}
                                     </text>
                                 )}
                             </g>

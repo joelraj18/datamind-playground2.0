@@ -39,19 +39,21 @@ export function buildChartSvg(element, { title, subtitle, legend = [] }) {
     plot.querySelectorAll(TRANSIENT).forEach((n) => n.remove());
     plot.removeAttribute('class');
     plot.removeAttribute('style');
-    plot.setAttribute('x', PAD);
     plot.setAttribute('width', width);
     plot.setAttribute('height', height);
     if (!plot.getAttribute('viewBox')) plot.setAttribute('viewBox', `0 0 ${width} ${height}`);
 
     const headerHeight = (title ? 30 : 0) + (subtitle ? 22 : 0);
+    // Narrow plots (e.g. a donut) still need room for the title, subtitle and legend.
+    const textWidth = Math.max((title || '').length * 11, (subtitle || '').length * 7.2, ...legend.map((l) => 40 + (l.label.length + (l.value || '').length + 2) * 7));
+    const totalWidth = Math.ceil(Math.max(width, textWidth, 360) + PAD * 2);
+    plot.setAttribute('x', PAD + Math.max(0, (totalWidth - PAD * 2 - width) / 2));
     plot.setAttribute('y', PAD + headerHeight);
 
     // Legend: swatch + label, wrapped onto rows.
     const legendItems = [];
     let lx = PAD;
     let ly = PAD + headerHeight + height + 24;
-    const totalWidth = width + PAD * 2;
     for (const item of legend) {
         const label = `${item.label}${item.value ? `  ${item.value}` : ''}`;
         const itemWidth = 22 + label.length * 7 + 18;

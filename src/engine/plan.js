@@ -23,7 +23,7 @@ export const PREVIEW_ROWS = 20;
 const ID_NAME = /(^id$|_id$|^id_|\bid\b|uuid|guid|^key$|_key$|^index$|^unnamed: 0$)/i;
 const CAMEL_ID = /[a-z]I[dD]$/; // OrderID, customerId — but not "Paid" or "valid"
 
-/** Scans the first megabyte: delimiter, header, a typed sample and a speed benchmark. */
+/** Scans the first megabyte: delimiter, header and a typed sample of rows. */
 export async function sniff(file) {
     let bytes = Math.min(file.size, SNIFF_BYTES);
     for (;;) {
@@ -47,7 +47,6 @@ export function sniffBuffer(buf, isWholeFile) {
     let rowsSeen = 0;
     let quotedNewline = false;
 
-    const t0 = now();
     const consumed = tokenize(buf, start, buf.length, delimiter, isWholeFile, rb, (n, rowStart) => {
         if (isBlankRow(n, rb)) return true;
         const fields = new Array(n);
@@ -70,7 +69,6 @@ export function sniffBuffer(buf, isWholeFile) {
         }
         return true;
     });
-    const elapsed = Math.max(now() - t0, 0.5);
 
     if (!header) throw new Error('That file is empty.');
     if (!dataStart) dataStart = consumed;
@@ -83,12 +81,8 @@ export function sniffBuffer(buf, isWholeFile) {
         sampleRows,
         avgRowBytes,
         quotedNewline,
-        // Bytes per millisecond on the main thread, cold JIT — a conservative first ETA.
-        benchmarkBytesPerMs: Math.max(1, (consumed - start) / elapsed),
     };
 }
-
-const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 // For each field: 0 missing, 1 number, 2 date, 3 text.
 function rawKinds(buf, rb, n) {

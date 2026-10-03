@@ -255,7 +255,7 @@ export default function DataMind() {
             </main>
 
             <footer className="footer">
-                <p>DataMind reads every row of your file in your browser, split across your CPU cores. Counts, means, correlations and group statistics are exact; for very large files, medians and percentiles are estimated to ±0.1%.</p>
+                <p>DataMind reads every row of your file in your browser, split across your CPU cores. Counts, means, correlations and group statistics are exact; medians and percentiles are exact too, except for fractional columns in very large files (±0.1%).</p>
                 <p className="footer__fine">Built with React and Recharts.</p>
             </footer>
         </div>

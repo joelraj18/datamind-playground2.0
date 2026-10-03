@@ -1,7 +1,7 @@
 // Turns merged scan results into the analysis object the UI renders and stores.
 
 import { civilFromDays } from './csv';
-import { numStreamDistinct } from './stream';
+import { numStreamDense, numStreamDistinct } from './stream';
 import {
     countAtOrBelow,
     countBelow,
@@ -246,6 +246,8 @@ function columnDistribution(merged, j, min, max) {
     const ns = merged.streams[j];
     const distinct = numStreamDistinct(ns);
     if (distinct) return createDistribution(distinct.values, distinct.counts, true, min, max);
+    const dense = numStreamDense(ns);
+    if (dense) return createDistribution(dense.values, dense.counts, true, min, max);
     const { values, counts } = sketchBuckets(ns.sketch);
     return createDistribution(values, counts, false, min, max);
 }

@@ -178,26 +178,280 @@ function growTimeline(tl, nTN) {
     tl.ns = grow(tl.ns, size * nTN);
 }
 
-function makeRowHandler(st, plan, rb) {
-    const ncols = plan.columns.length;
-    const { numeric, categorical, dates, shifts, corrCols, groupNums, timelineDates, timelineNums, maxGroups } = plan;
-    const nNum = numeric.length;
-    const nCat = categorical.length;
-    const nDate = dates.length;
-    const nSlots = plan.groupCats.length;
-    const nGN = groupNums.length;
-    const nC = corrCols.length;
-    const nTN = timelineNums.length;
-    const timelineOf = new Int16Array(nDate).fill(-1);
-    timelineDates.forEach((d, t) => (timelineOf[d] = t));
-    const { num, cat, groups, corr, vals, rowCodes, hash } = st;
-    const reservoirSize = plan.reservoirSize;
+/* ---------- Per-row work ----------
+ * Split into small functions on purpose: V8 declines to optimise very large functions, and one
+ * monolithic row handler ran ~15× slower in Chrome than these focused, individually optimised steps.
+ */
 
-    const decodeRow = (buf, n) => {
-        const row = new Array(ncols);
-        for (let k = 0; k < ncols; k++) row[k] = k < n ? fieldText(buf, rb, k) : '';
-        return row;
+function createContext(plan) {
+    const timelineOf = new Int16Array(plan.dates.length).fill(-1);
+    plan.timelineDates.forEach((d, t) => (timelineOf[d] = t));
+    return {
+        ncols: plan.columns.length,
+        numeric: Int32Array.from(plan.numeric),
+        categorical: Int32Array.from(plan.categorical),
+        dates: Int32Array.from(plan.dates),
+        shifts: plan.shifts,
+        corrCols: Int32Array.from(plan.corrCols),
+        groupNums: Int32Array.from(plan.groupNums),
+        timelineNums: Int32Array.from(plan.timelineNums),
+        timelineOf,
+        maxGroups: plan.maxGroups,
+        categoryCap: plan.categoryCap,
+        bufferCap: plan.bufferCap,
+        reservoirSize: plan.reservoirSize,
+        previewRows: plan.previewRows,
     };
+}
+
+function decodeRow(buf, rb, n, ncols) {
+    const row = new Array(ncols);
+    for (let k = 0; k < ncols; k++) row[k] = k < n ? fieldText(buf, rb, k) : '';
+    return row;
+}
+
+/** Categorical columns: counts, distinct estimate, and this row's group codes. */
+function scanCategorical(st, cx, buf, rb, n) {
+    const { cat, groups, rowCodes, hash } = st;
+    const starts = rb.starts;
+    const ends = rb.ends;
+    const cols = cx.categorical;
+    for (let c = 0; c < cols.length; c++) {
+        const col = cols[c];
+        const slot = st.groupSlotOfCat[c];
+        let code = -1;
+        const s = col < n ? starts[col] : 0;
+        const e = col < n ? ends[col] : 0;
+        if (col >= n || isNAToken(buf, s, e)) {
+            cat.missing[c]++;
+        } else {
+            hashBytes(buf, s, e, hash);
+            const h1 = hash[0];
+            const h2 = hash[1];
+            let table = cat.tables[c];
+            let ent = categoryFind(table, h1, h2);
+            if (ent < 0) {
+                const name = fieldText(buf, rb, col);
+                [table, ent] = categoryInsert(table, h1, h2, name);
+                cat.tables[c] = table;
+                if (slot >= 0 && groups.active[slot]) {
+                    if (groups.next[slot] < cx.maxGroups) {
+                        table.codes[ent] = groups.next[slot]++;
+                        groups.names[slot].push(name);
+                    } else {
+                        groups.active[slot] = 0; // too many categories to compare
+                    }
+                }
+            }
+            table.counts[ent]++;
+            hllAdd(cat.hll[c], h1, h2);
+            code = table.codes[ent];
+            if (table.size > cx.categoryCap) pruneCategories(st, c, cx.categoryCap);
+        }
+        if (slot >= 0) rowCodes[slot] = groups.active[slot] ? code : -1;
+    }
+}
+
+function noteInvalid(num, j, buf, rb, col) {
+    num.invalid[j]++;
+    const examples = num.invalidExamples[j];
+    if (examples.length < INVALID_EXAMPLES) {
+        const text = fieldText(buf, rb, col);
+        if (!examples.includes(text)) examples.push(text);
+    }
+}
+
+/** Numeric columns: parse into `vals` and accumulate moments and extremes. */
+function scanNumeric(st, cx, buf, rb, n) {
+    const { num, vals } = st;
+    const starts = rb.starts;
+    const ends = rb.ends;
+    const cols = cx.numeric;
+    const shifts = cx.shifts;
+    for (let j = 0; j < cols.length; j++) {
+        const col = cols[j];
+        let v = NaN;
+        if (col < n && starts[col] !== ends[col]) {
+            v = parseNumber(buf, starts[col], ends[col]);
+            if (Number.isNaN(v)) {
+                if (isNAToken(buf, starts[col], ends[col])) num.missing[j]++;
+                else noteInvalid(num, j, buf, rb, col);
+            }
+        } else {
+            num.missing[j]++;
+        }
+        vals[j] = v;
+        if (!Number.isNaN(v)) {
+            num.count[j]++;
+            const d = v - shifts[j];
+            const d2 = d * d;
+            num.s1[j] += d;
+            num.s2[j] += d2;
+            num.s3[j] += d2 * d;
+            num.s4[j] += d2 * d2;
+            if (v < num.min[j]) num.min[j] = v;
+            if (v > num.max[j]) num.max[j] = v;
+            if (num.nonInteger[j] === 0 && v % 1 !== 0) num.nonInteger[j] = 1;
+        }
+    }
+}
+
+/** Value distributions: keep everything (exact mode) or stream into distinct tables / sketches. */
+function storeValues(st, plan, row) {
+    const { vals, rowCodes } = st;
+    if (st.exact && row >= plan.bufferCap) switchToStreaming(st, plan);
+    if (st.exact) {
+        if (row >= st.capacity) growBuffers(st, row + 1);
+        const buffers = st.buffers;
+        for (let j = 0; j < vals.length; j++) buffers[j][row] = vals[j];
+        const codes = st.codes;
+        for (let s = 0; s < codes.length; s++) codes[s][row] = rowCodes[s] < 0 ? 255 : rowCodes[s];
+        return;
+    }
+    const streams = st.streams;
+    for (let j = 0; j < vals.length; j++) {
+        const v = vals[j];
+        if (!Number.isNaN(v)) numStreamAdd(streams[j], v, rowCodes);
+    }
+}
+
+/** Group sums for bivariate means. */
+function scanGroups(st, cx) {
+    const { groups, rowCodes, vals } = st;
+    const groupNums = cx.groupNums;
+    const nGN = groupNums.length;
+    for (let s = 0; s < rowCodes.length; s++) {
+        const code = rowCodes[s];
+        if (code < 0) continue;
+        const base = (s * cx.maxGroups + code) * nGN;
+        for (let k = 0; k < nGN; k++) {
+            const j = groupNums[k];
+            const v = vals[j];
+            if (Number.isNaN(v)) continue;
+            const idx = base + k;
+            const d = v - cx.shifts[j];
+            groups.n[idx]++;
+            groups.s1[idx] += d;
+            groups.s2[idx] += d * d;
+            if (v < groups.min[idx]) groups.min[idx] = v;
+            if (v > groups.max[idx]) groups.max[idx] = v;
+        }
+    }
+}
+
+/** Correlation cross-products; rows with every value present take the fast path. */
+function scanCorrelation(st, cx) {
+    const { corr, vals } = st;
+    const cols = cx.corrCols;
+    const nC = cols.length;
+    const x = corr.x;
+    let complete = true;
+    for (let a = 0; a < nC; a++) {
+        const j = cols[a];
+        x[a] = vals[j] - cx.shifts[j];
+        if (Number.isNaN(x[a])) complete = false;
+    }
+    let p = 0;
+    if (complete) {
+        corr.completeN++;
+        const { cs1, cs2, csxy } = corr;
+        for (let a = 0; a < nC; a++) {
+            const xa = x[a];
+            cs1[a] += xa;
+            cs2[a] += xa * xa;
+            for (let b = a + 1; b < nC; b++) csxy[p++] += xa * x[b];
+        }
+        return;
+    }
+    for (let a = 0; a < nC; a++) {
+        const xa = x[a];
+        if (Number.isNaN(xa)) {
+            p += nC - a - 1;
+            continue;
+        }
+        for (let b = a + 1; b < nC; b++, p++) {
+            const xb = x[b];
+            if (Number.isNaN(xb)) continue;
+            corr.pn[p]++;
+            corr.psx[p] += xa;
+            corr.psy[p] += xb;
+            corr.psxx[p] += xa * xa;
+            corr.psyy[p] += xb * xb;
+            corr.psxy[p] += xa * xb;
+        }
+    }
+}
+
+/** Dates: range plus a per-day timeline. */
+function scanDates(st, cx, buf, rb, n) {
+    const { dates, vals } = st;
+    const cols = cx.dates;
+    const nums = cx.timelineNums;
+    const nTN = nums.length;
+    for (let d = 0; d < cols.length; d++) {
+        const col = cols[d];
+        const s = col < n ? rb.starts[col] : 0;
+        const e = col < n ? rb.ends[col] : 0;
+        if (col >= n || isNAToken(buf, s, e)) {
+            dates.missing[d]++;
+            continue;
+        }
+        const day = parseDay(buf, s, e);
+        if (Number.isNaN(day)) {
+            dates.invalid[d]++;
+            continue;
+        }
+        dates.count[d]++;
+        if (day < dates.min[d]) dates.min[d] = day;
+        if (day > dates.max[d]) dates.max[d] = day;
+        const t = cx.timelineOf[d];
+        if (t < 0) continue;
+        const tl = dates.timelines[t];
+        let slot = tl.slotOf.get(day);
+        if (slot === undefined) {
+            if (tl.size >= MAX_TIMELINE_DAYS) {
+                tl.overflow = true;
+                continue;
+            }
+            if (tl.size === tl.days.length) growTimeline(tl, nTN);
+            slot = tl.size++;
+            tl.slotOf.set(day, slot);
+            tl.days[slot] = day;
+        }
+        tl.counts[slot]++;
+        const base = slot * nTN;
+        for (let k = 0; k < nTN; k++) {
+            const v = vals[nums[k]];
+            if (!Number.isNaN(v)) {
+                tl.sums[base + k] += v;
+                tl.ns[base + k]++;
+            }
+        }
+    }
+}
+
+/** Uniform random sample of rows (reservoir sampling, Algorithm L: no random draw per row). */
+function sampleRow(st, cx, buf, rb, n, seen) {
+    const size = cx.reservoirSize;
+    if (seen <= size) {
+        st.reservoir.push(decodeRow(buf, rb, n, cx.ncols));
+        if (seen === size) {
+            st.weight = Math.exp(Math.log(Math.random()) / size);
+            st.nextPick = seen + Math.floor(Math.log(Math.random()) / Math.log(1 - st.weight)) + 1;
+        }
+    } else if (seen === st.nextPick) {
+        st.reservoir[Math.floor(Math.random() * size)] = decodeRow(buf, rb, n, cx.ncols);
+        st.weight *= Math.exp(Math.log(Math.random()) / size);
+        st.nextPick += Math.floor(Math.log(Math.random()) / Math.log(1 - st.weight)) + 1;
+    }
+}
+
+function makeRowHandler(st, plan, rb) {
+    const cx = createContext(plan);
+    const hasCat = cx.categorical.length > 0;
+    const hasGroups = plan.groupCats.length > 0 && cx.groupNums.length > 0;
+    const hasCorr = cx.corrCols.length > 1;
+    const hasDates = cx.dates.length > 0;
 
     return (n, rowStart) => {
         if (rowStart >= st.limit) {
@@ -206,211 +460,16 @@ function makeRowHandler(st, plan, rb) {
         }
         if (isBlankRow(n, rb)) return true;
         const buf = st.buf;
-        const starts = rb.starts;
-        const ends = rb.ends;
         const row = st.rows++;
-        if (n !== ncols) st.malformed++;
-        if (st.preview && st.preview.length < plan.previewRows) st.preview.push(decodeRow(buf, n));
-
-        /* Categorical columns: counts, distinct estimate, and group codes. */
-        for (let c = 0; c < nCat; c++) {
-            const col = categorical[c];
-            const slot = st.groupSlotOfCat[c];
-            let code = -1;
-            const s = col < n ? starts[col] : 0;
-            const e = col < n ? ends[col] : 0;
-            if (col >= n || isNAToken(buf, s, e)) {
-                cat.missing[c]++;
-            } else {
-                hashBytes(buf, s, e, hash);
-                const h1 = hash[0];
-                const h2 = hash[1];
-                let table = cat.tables[c];
-                let ent = categoryFind(table, h1, h2);
-                if (ent < 0) {
-                    const name = fieldText(buf, rb, col);
-                    [table, ent] = categoryInsert(table, h1, h2, name);
-                    cat.tables[c] = table;
-                    if (slot >= 0 && groups.active[slot]) {
-                        if (groups.next[slot] < maxGroups) {
-                            table.codes[ent] = groups.next[slot]++;
-                            groups.names[slot].push(name);
-                        } else {
-                            groups.active[slot] = 0; // too many categories to compare
-                        }
-                    }
-                }
-                table.counts[ent]++;
-                hllAdd(cat.hll[c], h1, h2);
-                code = table.codes[ent];
-                if (table.size > plan.categoryCap) pruneCategories(st, c, plan.categoryCap);
-            }
-            if (slot >= 0) rowCodes[slot] = groups.active[slot] ? code : -1;
-        }
-
-        /* Numeric columns: moments, extremes and the value itself. */
-        for (let j = 0; j < nNum; j++) {
-            const col = numeric[j];
-            let v = NaN;
-            if (col < n) {
-                const s = starts[col];
-                const e = ends[col];
-                if (s !== e) {
-                    v = parseNumber(buf, s, e);
-                    if (Number.isNaN(v)) {
-                        if (isNAToken(buf, s, e)) num.missing[j]++;
-                        else {
-                            num.invalid[j]++;
-                            const examples = num.invalidExamples[j];
-                            if (examples.length < INVALID_EXAMPLES) {
-                                const text = fieldText(buf, rb, col);
-                                if (!examples.includes(text)) examples.push(text);
-                            }
-                        }
-                    }
-                } else num.missing[j]++;
-            } else num.missing[j]++;
-            vals[j] = v;
-            if (!Number.isNaN(v)) {
-                num.count[j]++;
-                const d = v - shifts[j];
-                const d2 = d * d;
-                num.s1[j] += d;
-                num.s2[j] += d2;
-                num.s3[j] += d2 * d;
-                num.s4[j] += d2 * d2;
-                if (v < num.min[j]) num.min[j] = v;
-                if (v > num.max[j]) num.max[j] = v;
-                if (num.nonInteger[j] === 0 && v % 1 !== 0) num.nonInteger[j] = 1;
-            }
-        }
-
-        /* Value distributions: keep everything (exact) or stream into distinct maps / sketches. */
-        if (st.exact && row >= plan.bufferCap) switchToStreaming(st, plan);
-        if (st.exact) {
-            if (row >= st.capacity) growBuffers(st, row + 1);
-            for (let j = 0; j < nNum; j++) st.buffers[j][row] = vals[j];
-            for (let s = 0; s < nSlots; s++) st.codes[s][row] = rowCodes[s] < 0 ? 255 : rowCodes[s];
-        } else {
-            for (let j = 0; j < nNum; j++) {
-                const v = vals[j];
-                if (!Number.isNaN(v)) numStreamAdd(st.streams[j], v, rowCodes);
-            }
-        }
-
-        /* Group sums for bivariate means. */
-        for (let s = 0; s < nSlots; s++) {
-            const code = rowCodes[s];
-            if (code < 0) continue;
-            const base = (s * maxGroups + code) * nGN;
-            for (let k = 0; k < nGN; k++) {
-                const j = groupNums[k];
-                const v = vals[j];
-                if (Number.isNaN(v)) continue;
-                const idx = base + k;
-                const d = v - shifts[j];
-                groups.n[idx]++;
-                groups.s1[idx] += d;
-                groups.s2[idx] += d * d;
-                if (v < groups.min[idx]) groups.min[idx] = v;
-                if (v > groups.max[idx]) groups.max[idx] = v;
-            }
-        }
-
-        /* Correlation cross-products. */
-        if (nC > 1) {
-            const x = corr.x;
-            let complete = true;
-            for (let a = 0; a < nC; a++) {
-                const j = corrCols[a];
-                x[a] = vals[j] - shifts[j];
-                if (Number.isNaN(x[a])) complete = false;
-            }
-            let p = 0;
-            if (complete) {
-                corr.completeN++;
-                for (let a = 0; a < nC; a++) {
-                    const xa = x[a];
-                    corr.cs1[a] += xa;
-                    corr.cs2[a] += xa * xa;
-                    for (let b = a + 1; b < nC; b++) corr.csxy[p++] += xa * x[b];
-                }
-            } else {
-                for (let a = 0; a < nC; a++) {
-                    const xa = x[a];
-                    if (Number.isNaN(xa)) {
-                        p += nC - a - 1;
-                        continue;
-                    }
-                    for (let b = a + 1; b < nC; b++, p++) {
-                        const xb = x[b];
-                        if (Number.isNaN(xb)) continue;
-                        corr.pn[p]++;
-                        corr.psx[p] += xa;
-                        corr.psy[p] += xb;
-                        corr.psxx[p] += xa * xa;
-                        corr.psyy[p] += xb * xb;
-                        corr.psxy[p] += xa * xb;
-                    }
-                }
-            }
-        }
-
-        /* Dates: range plus a per-day timeline. */
-        for (let d = 0; d < nDate; d++) {
-            const col = dates[d];
-            const s = col < n ? starts[col] : 0;
-            const e = col < n ? ends[col] : 0;
-            if (col >= n || isNAToken(buf, s, e)) {
-                st.dates.missing[d]++;
-                continue;
-            }
-            const day = parseDay(buf, s, e);
-            if (Number.isNaN(day)) {
-                st.dates.invalid[d]++;
-                continue;
-            }
-            st.dates.count[d]++;
-            if (day < st.dates.min[d]) st.dates.min[d] = day;
-            if (day > st.dates.max[d]) st.dates.max[d] = day;
-            const t = timelineOf[d];
-            if (t < 0) continue;
-            const tl = st.dates.timelines[t];
-            let slot = tl.slotOf.get(day);
-            if (slot === undefined) {
-                if (tl.size >= MAX_TIMELINE_DAYS) {
-                    tl.overflow = true;
-                    continue;
-                }
-                if (tl.size === tl.days.length) growTimeline(tl, nTN);
-                slot = tl.size++;
-                tl.slotOf.set(day, slot);
-                tl.days[slot] = day;
-            }
-            tl.counts[slot]++;
-            const base = slot * nTN;
-            for (let k = 0; k < nTN; k++) {
-                const v = vals[timelineNums[k]];
-                if (!Number.isNaN(v)) {
-                    tl.sums[base + k] += v;
-                    tl.ns[base + k]++;
-                }
-            }
-        }
-
-        /* Uniform random sample of rows (reservoir sampling, Algorithm L). */
-        const seen = row + 1;
-        if (seen <= reservoirSize) {
-            st.reservoir.push(decodeRow(buf, n));
-            if (seen === reservoirSize) {
-                st.weight = Math.exp(Math.log(Math.random()) / reservoirSize);
-                st.nextPick = seen + Math.floor(Math.log(Math.random()) / Math.log(1 - st.weight)) + 1;
-            }
-        } else if (seen === st.nextPick) {
-            st.reservoir[Math.floor(Math.random() * reservoirSize)] = decodeRow(buf, n);
-            st.weight *= Math.exp(Math.log(Math.random()) / reservoirSize);
-            st.nextPick += Math.floor(Math.log(Math.random()) / Math.log(1 - st.weight)) + 1;
-        }
+        if (n !== cx.ncols) st.malformed++;
+        if (st.preview !== null && st.preview.length < cx.previewRows) st.preview.push(decodeRow(buf, rb, n, cx.ncols));
+        if (hasCat) scanCategorical(st, cx, buf, rb, n);
+        scanNumeric(st, cx, buf, rb, n);
+        storeValues(st, plan, row);
+        if (hasGroups) scanGroups(st, cx);
+        if (hasCorr) scanCorrelation(st, cx);
+        if (hasDates) scanDates(st, cx, buf, rb, n);
+        sampleRow(st, cx, buf, rb, n, row + 1);
         return true;
     };
 }
@@ -473,7 +532,7 @@ function finishState(st, plan, range) {
     const rows = st.rows;
     const trim = (arr) => (arr ? arr.slice(0, rows) : null);
     const streams = st.streams
-        ? st.streams.map((ns) => numStreamDistinct(ns) || { sketch: ns.sketch, groups: ns.groups })
+        ? st.streams.map((ns) => numStreamDistinct(ns) || (ns.dense ? { dense: ns.dense, groups: ns.groups } : { sketch: ns.sketch, groups: ns.groups }))
         : null;
 
     return {

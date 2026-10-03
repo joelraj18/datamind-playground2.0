@@ -25,6 +25,7 @@ import {
 } from 'recharts';
 import { formatCompact, formatNumber, formatPct } from '../lib/analysis';
 import { CATEGORICAL, CHART, OTHER_COLOR } from '../lib/palette';
+import { niceTicks } from './svgCharts';
 
 const AXIS = {
     stroke: CHART.axis,
@@ -58,7 +59,7 @@ export function HistogramChart({ bins, column, total, integer }) {
     return (
         <div className="chart chart--md" role="img" aria-label={`Histogram of ${column}`}>
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 18 }} barCategoryGap={1}>
+                <BarChart data={data} margin={{ top: 8, right: 30, left: 4, bottom: 18 }} barCategoryGap={1}>
                     <CartesianGrid vertical={false} stroke={CHART.grid} />
                     <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={18} label={{ value: column, position: 'insideBottom', offset: -12, ...AXIS_LABEL }} />
                     <YAxis {...AXIS} axisLine={false} allowDecimals={false} width={56} tickFormatter={formatCompact} label={{ value: 'Records', angle: -90, position: 'insideLeft', offset: 8, ...AXIS_LABEL }} />
@@ -117,19 +118,28 @@ export function EcdfChart({ points, column, exact }) {
     );
 }
 
+function roundDomain(lo, hi) {
+    const span = hi - lo || Math.abs(hi) || 1;
+    const step = 10 ** Math.floor(Math.log10(span / 4));
+    const nice = [1, 2, 2.5, 5, 10].find((s) => span / (s * step) <= 5) * step;
+    return [Math.floor(lo / nice) * nice, Math.ceil(hi / nice) * nice];
+}
+
+const smallDot = (fill, opacity) => (props) => <circle cx={props.cx} cy={props.cy} r={2.6} fill={fill} fillOpacity={opacity} />;
+
 export function QQChart({ points, column }) {
-    const lo = Math.min(points[0].theoretical, points[0].sample);
-    const hi = Math.max(points[points.length - 1].theoretical, points[points.length - 1].sample);
+    const [lo, hi] = roundDomain(Math.min(points[0].theoretical, points[0].sample), Math.max(points[points.length - 1].theoretical, points[points.length - 1].sample));
+    const ticks = niceTicks(lo, hi, 5);
     return (
         <div className="chart chart--md" role="img" aria-label={`Normal Q-Q plot of ${column}`}>
             <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 8, right: 16, left: 4, bottom: 18 }}>
                     <CartesianGrid stroke={CHART.grid} />
-                    <XAxis dataKey="theoretical" type="number" domain={[lo, hi]} {...AXIS} tickFormatter={formatCompact} label={{ value: 'Expected if normal', position: 'insideBottom', offset: -12, ...AXIS_LABEL }} />
-                    <YAxis dataKey="sample" type="number" domain={[lo, hi]} {...AXIS} axisLine={false} width={56} tickFormatter={formatCompact} label={{ value: `Actual ${truncate(column, 18)}`, angle: -90, position: 'insideLeft', offset: 8, ...AXIS_LABEL }} />
+                    <XAxis dataKey="theoretical" type="number" domain={[lo, hi]} ticks={ticks} {...AXIS} tickFormatter={formatCompact} label={{ value: 'Expected if normal', position: 'insideBottom', offset: -12, ...AXIS_LABEL }} />
+                    <YAxis dataKey="sample" type="number" domain={[lo, hi]} ticks={ticks} {...AXIS} axisLine={false} width={56} tickFormatter={formatCompact} label={{ value: `Actual ${truncate(column, 18)}`, angle: -90, position: 'insideLeft', offset: 8, ...AXIS_LABEL }} />
                     <ReferenceLine segment={[{ x: lo, y: lo }, { x: hi, y: hi }]} stroke={CHART.axis} strokeDasharray="5 4" ifOverflow="extendDomain" />
                     <Tooltip content={({ active, payload }) => (active && payload?.length ? <TooltipCard title="Quantile" rows={[['Expected', formatNumber(payload[0].payload.theoretical)], ['Actual', formatNumber(payload[0].payload.sample)]]} /> : null)} />
-                    <Scatter data={points} fill={CHART.primary} shape="circle" isAnimationActive={false} />
+                    <Scatter data={points} fill={CHART.primary} shape={smallDot(CHART.primary, 0.9)} isAnimationActive={false} />
                 </ScatterChart>
             </ResponsiveContainer>
         </div>
@@ -290,7 +300,7 @@ export function ScatterTrendChart({ points, xCol, yCol, fit }) {
                     <XAxis dataKey="x" type="number" domain={['auto', 'auto']} {...AXIS} tickFormatter={formatCompact} label={{ value: xCol, position: 'insideBottom', offset: -12, ...AXIS_LABEL }} />
                     <YAxis dataKey="y" type="number" domain={['auto', 'auto']} {...AXIS} axisLine={false} width={60} tickFormatter={formatCompact} label={{ value: yCol, angle: -90, position: 'insideLeft', offset: 8, ...AXIS_LABEL }} />
                     <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ active, payload }) => (active && payload?.length ? <TooltipCard title="Sampled row" rows={[[xCol, formatNumber(payload[0].payload.x)], [yCol, formatNumber(payload[0].payload.y)]]} /> : null)} />
-                    <Scatter data={points} fill={CHART.primary} fillOpacity={0.35} shape="circle" isAnimationActive={false} />
+                    <Scatter data={points} fill={CHART.primary} shape={smallDot(CHART.primary, 0.3)} isAnimationActive={false} />
                     {line && <ReferenceLine segment={line} stroke={CHART.accent} strokeWidth={2.5} ifOverflow="hidden" />}
                 </ScatterChart>
             </ResponsiveContainer>

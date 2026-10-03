@@ -230,8 +230,8 @@ export default function UnivariateTab({ analysis }) {
                         </Card>
                         {!meta.exactStats && (
                             <Callout title="Some quantiles are estimated">
-                                {meta.approxColumns.join(', ')} {meta.approxColumns.length > 1 ? 'have' : 'has'} too many distinct values to keep in memory at this file size, so medians, percentiles and
-                                histograms come from a streaming sketch accurate to ±0.1% (marked ≈). Counts, means, std, skew, min and max are exact.
+                                {meta.approxColumns.join(', ')} {meta.approxColumns.length > 1 ? 'hold' : 'holds'} too many distinct fractional values to keep in memory at this file size, so medians,
+                                percentiles and histograms come from a streaming sketch accurate to ±0.1% (marked ≈). Counts, means, std, skew, min and max are exact.
                             </Callout>
                         )}
                         <div className="grid grid--2">

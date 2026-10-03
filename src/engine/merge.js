@@ -1,7 +1,7 @@
 // Combines per-worker partial results into one, as if a single scan had read the whole file.
 
 import { hllMerge } from './sketch';
-import { createNumStream, numStreamAdd, numStreamAddWeighted, numStreamMergeSketch } from './stream';
+import { createNumStream, numStreamAdd, numStreamAddWeighted, numStreamMergeDense, numStreamMergeSketch } from './stream';
 
 export function mergePartials(input, plan) {
     const partials = [...input].sort((a, b) => a.index - b.index);
@@ -104,6 +104,10 @@ export function mergePartials(input, plan) {
                 return;
             }
             p.streams.forEach((src, j) => {
+                if (src.dense) {
+                    numStreamMergeDense(streams[j], src, remapIndex);
+                    return;
+                }
                 if (!src.values) {
                     numStreamMergeSketch(streams[j], src, remapIndex);
                     return;

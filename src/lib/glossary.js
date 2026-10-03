@@ -26,7 +26,7 @@ export const GLOSSARY = {
     percentiles: 'Pxx is the value below which xx% of records fall, using linear interpolation like pandas.',
     outliers: 'Values below Q1 − 1.5 × IQR or above Q3 + 1.5 × IQR (the box-plot rule).',
     exactness:
-        'Counts, means, std, skewness, min/max, correlations and group means are always computed exactly over every row. Medians, percentiles and histograms are exact for files up to about 2 million rows and for any column with ≤ 1,024 distinct values; beyond that they come from a streaming sketch accurate to ±0.1% of the value (marked ≈).',
+        'Counts, means, std, skewness, min/max, correlations and group means are always computed exactly over every row. Medians, percentiles and histograms are also exact for files up to about 2 million rows, for columns with ≤ 1,024 distinct values, and for whole-number columns spanning up to 262,144 values (prices, ages, counts, years). Otherwise they come from a streaming sketch accurate to ±0.1% of the value (marked ≈).',
     donut: 'Share of records in each category. Categories beyond the top 7 are grouped into “Other”.',
     categoryBars: 'Number of records per category, longest first. Bars make small differences easier to compare than a donut.',
     timeline: 'Records per day, week, month or year — or the average of a numeric column over time.',
