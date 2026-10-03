@@ -15,6 +15,7 @@ describe('formatters', () => {
     test('numbers, sizes and durations', () => {
         expect(formatNumber(null)).toBe('—');
         expect(formatNumber(Infinity)).toBe('∞');
+        expect(formatNumber(-0.0001)).toBe('0');
         expect(formatBytes(1500)).toBe('1.5 KB');
         expect(formatDuration(65_000)).toBe('1 min 05 s');
         expect(formatCompact(1_250_000)).toMatch(/1\.3M/);

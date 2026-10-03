@@ -59,7 +59,7 @@ export function HistogramChart({ bins, column, total, integer }) {
     return (
         <div className="chart chart--md" role="img" aria-label={`Histogram of ${column}`}>
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} margin={{ top: 8, right: 30, left: 4, bottom: 18 }} barCategoryGap={1}>
+                <BarChart data={data} margin={{ top: 8, right: 44, left: 4, bottom: 18 }} barCategoryGap={1}>
                     <CartesianGrid vertical={false} stroke={CHART.grid} />
                     <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={18} label={{ value: column, position: 'insideBottom', offset: -12, ...AXIS_LABEL }} />
                     <YAxis {...AXIS} axisLine={false} allowDecimals={false} width={56} tickFormatter={formatCompact} label={{ value: 'Records', angle: -90, position: 'insideLeft', offset: 8, ...AXIS_LABEL }} />

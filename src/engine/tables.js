@@ -49,7 +49,10 @@ export function distinctIndex(t, v) {
 
 /* ---------- Categories keyed by a pair of 32-bit hashes ---------- */
 
-export function createCategoryTable(initial = 64) {
+export function createCategoryTable(minCapacity = 64) {
+    // Capacity must be a power of two: probing uses `hash & mask`.
+    let initial = 64;
+    while (initial < minCapacity) initial <<= 1;
     return {
         size: 0,
         mask: initial * 2 - 1,

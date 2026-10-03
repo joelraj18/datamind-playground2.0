@@ -10,6 +10,7 @@ import { categoryEntries, categoryFind, categoryInsert, categoryPrune, createCat
 export const CHUNK_BYTES = 4 << 20;
 const MAX_TIMELINE_DAYS = 200_000;
 const INVALID_EXAMPLES = 5;
+const FREEZE_AFTER_PRUNES = 3;
 
 function createState(plan, rangeIndex) {
     const nNum = plan.numeric.length;
@@ -64,7 +65,7 @@ function createState(plan, rangeIndex) {
             tables: Array.from({ length: nCat }, () => createCategoryTable()),
             missing: new Float64Array(nCat),
             hll: Array.from({ length: nCat }, createHll),
-            pruned: new Uint8Array(nCat),
+            pruned: new Uint8Array(nCat), // number of times the table was cut back (0 = counts exact)
             dropped: new Float64Array(nCat),
         },
         hash: new Uint32Array(2),
@@ -162,7 +163,7 @@ function pruneCategories(st, c, cap) {
     const [table, dropped] = categoryPrune(st.cat.tables[c], Math.floor(cap / 2));
     st.cat.tables[c] = table;
     st.cat.dropped[c] += dropped;
-    st.cat.pruned[c] = 1;
+    if (st.cat.pruned[c] < 255) st.cat.pruned[c]++;
 }
 
 function growTimeline(tl, nTN) {
@@ -230,6 +231,14 @@ function scanCategorical(st, cx, buf, rb, n) {
             const h2 = hash[1];
             let table = cat.tables[c];
             let ent = categoryFind(table, h1, h2);
+            if (ent < 0 && cat.pruned[c] >= FREEZE_AFTER_PRUNES) {
+                // An ID-like column (millions of distinct values): stop tracking new names so the
+                // table stops churning; its distinct count still comes from HyperLogLog.
+                cat.dropped[c]++;
+                hllAdd(cat.hll[c], h1, h2);
+                if (slot >= 0) rowCodes[slot] = -1;
+                continue;
+            }
             if (ent < 0) {
                 const name = fieldText(buf, rb, col);
                 [table, ent] = categoryInsert(table, h1, h2, name);

@@ -222,6 +222,18 @@ describe('dense integer counters (streaming mode)', () => {
     });
 });
 
+describe('high-cardinality text', () => {
+    test('a column with 60,000 unique values finishes, with an estimated distinct count', async () => {
+        const lines = Array.from({ length: 60000 }, (_, i) => `user-${(i * 2654435761) % 4294967296},${i % 3 ? 'a' : 'b'}`);
+        const a = await analyseInParts(`user,flag\n${lines.join('\n')}\n`, 1, 'stream');
+        expect(a.meta.rows).toBe(60000);
+        expect(a.stats.user.uniqueExact).toBe(false);
+        expect(Math.abs(a.stats.user.unique - 60000) / 60000).toBeLessThan(0.03);
+        expect(a.stats.flag.unique).toBe(2);
+        expect(a.categoricalDists.flag[0]).toEqual(expect.objectContaining({ name: 'a', value: 40000 }));
+    });
+});
+
 describe('analyzeFile (main-thread fallback)', () => {
     test('handles CRLF, BOM, semicolons and invalid numbers', async () => {
         const good = Array.from({ length: 12 }, (_, k) => `${k};${k % 2 ? 'x' : 'y'};2024-01-0${1 + (k % 9)}`);

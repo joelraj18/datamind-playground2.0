@@ -15,6 +15,7 @@ export const correlationBetween = (correlations, a, b) => {
 export function formatNumber(value, digits = 2) {
     if (value == null || Number.isNaN(value)) return '—';
     if (!Number.isFinite(value)) return '∞';
+    if (Math.abs(value) < 0.5 * 10 ** -digits) value = 0; // never print "-0"
     const abs = Math.abs(value);
     if (abs !== 0 && (abs >= 1e15 || abs < 1e-4)) return value.toExponential(2);
     return value.toLocaleString(undefined, { maximumFractionDigits: Number.isInteger(value) ? 0 : digits });

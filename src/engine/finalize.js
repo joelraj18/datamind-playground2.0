@@ -118,6 +118,7 @@ export function histogramFromEdges(dist, edges, integer) {
 
 function formatEdge(v) {
     const abs = Math.abs(v);
+    if (abs !== 0 && abs < 1e-3) return v.toExponential(2).replace(/\.?0+e/, 'e');
     if (abs >= 1e9) return `${+(v / 1e9).toFixed(2)}B`;
     if (abs >= 1e6) return `${+(v / 1e6).toFixed(2)}M`;
     if (abs >= 1e4) return `${+(v / 1e3).toFixed(1)}k`;

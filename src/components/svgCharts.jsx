@@ -34,9 +34,28 @@ const TEXT = { fontSize: 11, fill: CHART.axis };
 
 /* ---------- One horizontal box plot ---------- */
 
+/** Box-plot labels: full precision, but compact for very large magnitudes so labels don't collide. */
+const boxLabel = (v) => (Math.abs(v) >= 1e7 ? Intl.NumberFormat(undefined, { notation: 'compact', maximumSignificantDigits: 4 }).format(v) : formatNumber(v));
+
 export function BoxPlotChart({ box, column, exact }) {
     const [ref, width] = useWidth();
     const height = 190;
+    if (box.min === box.max) {
+        return (
+            <div ref={ref} className="chart" style={{ height }}>
+                <svg width={width} height={height} role="img" aria-label={`Every value of ${column} is ${formatNumber(box.min)}`}>
+                    <line x1={24} x2={width - 24} y1={116} y2={116} stroke={CHART.grid} />
+                    <circle cx={width / 2} cy={76} r={7} fill={CHART.accent} />
+                    <text x={width / 2} y={50} textAnchor="middle" fontSize={13} fontWeight={600} fill={CHART.text}>
+                        {`All values = ${formatNumber(box.min)}`}
+                    </text>
+                    <text x={width / 2} y={140} textAnchor="middle" {...TEXT}>
+                        {`${column} has no spread, so there is no box to draw`}
+                    </text>
+                </svg>
+            </div>
+        );
+    }
     const m = { left: 24, right: 24, top: 36, bottom: 44 };
     const lo = box.min;
     const hi = box.max;
@@ -89,7 +108,7 @@ export function BoxPlotChart({ box, column, exact }) {
                 )}
                 {labels.map(([name, v], i) => (
                     <text key={name} x={x(v)} y={cy - 32} textAnchor={i === 0 ? 'end' : i === 2 ? 'start' : 'middle'} fontSize={11} fill={CHART.text} fontWeight={i === 1 ? 600 : 400}>
-                        {`${name} ${a}${formatNumber(v)}`}
+                        {`${name} ${a}${boxLabel(v)}`}
                     </text>
                 ))}
             </svg>
